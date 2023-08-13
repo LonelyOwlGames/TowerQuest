@@ -193,34 +193,44 @@ function Physics:getAllNodes()
     return nodes
 end
 
-local flickerTimer = 0
-local function flicker(node, dt)
-    local tick = math.random(1.5,0.7)
-
+function Physics:flicker(node, dt)
     node.light.flicker = node.light.flicker + dt
-    if node.light.flicker > tick then
+
+    if node.light.flicker > node.light.tick then
         node.light.r = math.random(200,250)
         node.light.g = math.random(80,110)
         node.light.b = math.random(0,15)
-        node.light.a = 50
-        node.light.flicker = 0
+        node.light.a = 25
     end
+
+    node.light.tick = math.random(0.2,0.8) 
 end
 
+function Physics:flickerInit(node)
+    node.light.flicker = 0
+    node.light.tick = 0
+    table.insert(self.listOfFlickeringTiles, node)
+end
 
+function Physics:processListOfTorches()
+    self.listOfTorches = {}
+    self.listOfFlickeringTiles = {}
 
-function Physics:updateFlickeringLights(dt)
     for x, _ in pairs(self.nodes) do
         for _, node in pairs(self.nodes[x]) do
-            if node.id then
-                if node.gid == 97 then
-                    flicker(node, dt)
-                    for _, neighborNode in pairs(node.neighbors) do
-                        flicker(neighborNode, dt)
-                        for _, neighborNeighborNode in pairs(neighborNode.neighbors) do
-                            flicker(neighborNeighborNode, dt)
-                        end
+            if node.id and node.seen and node.gid == 97 then
+                table.insert(self.listOfTorches, node)
+                self:flickerInit(node) 
 
+                for _, neighborNode in pairs(node.neighbors) do
+                    if neighborNode.y >= node.y and neighborNode.seen then
+                        self:flickerInit(neighborNode) 
+
+                        for _, neighborNeighborNode in pairs(neighborNode.neighbors) do
+                            if neighborNeighborNode.y >= node.y and neighborNeighborNode.seen then
+                                self:flickerInit(neighborNeighborNode) 
+                            end
+                        end
                     end
                 end
             end
@@ -228,8 +238,14 @@ function Physics:updateFlickeringLights(dt)
     end
 end
 
+function Physics:updateFlickeringLights(dt)
+    for _, node in pairs(self.listOfFlickeringTiles) do
+        self:flicker(node, dt)
+    end
+end
+
 function Physics:distance(nodeA, nodeB, cost)
-    return 1 + cost
+    return cost
 end
 
 function Physics:getMapValue(node)
@@ -307,6 +323,7 @@ function Physics:generateDijkstraMap()
 
     -- Special calculation for lighting on wall tiles.
     self:lightUpWallNodes()
+    self:processListOfTorches()
 end
 
 function Physics:dijkstra(source)
@@ -325,9 +342,9 @@ function Physics:dijkstra(source)
         table.remove(listOfNodes, 1)
 
         -- If distance < 15, adjust lighting. If distance < 11, mark tile as "seen" for minimap
-        if currentNode.distance < 15 then
-            currentNode.light.a = math.max(currentNode.light.a + (currentNode.distance-math.random(25,75)), 50)
-            if currentNode.distance < 11 then
+        if currentNode.distance < 10 then
+            currentNode.light.a = math.max(currentNode.light.a + (currentNode.distance-math.random(25,75)), 25)
+            if currentNode.distance < 9 then
                 currentNode.seen = true
             end
         end

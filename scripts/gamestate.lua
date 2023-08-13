@@ -32,8 +32,8 @@ local function drawFogOfWar(map, player, sx, sy)
 
                 -- DEBUG --
                 -- Draw tile alpha
-                love.graphics.printf(tile.light.a, tile.x - tx + 32, tile.y - ty + 32, 400)
-                love.graphics.printf(#tile.neighbors, tile.x - tx + 32, tile.y - ty + 42, 400)
+                --love.graphics.printf(tile.distance, tile.x - tx + 32, tile.y - ty + 32, 400)
+                --love.graphics.printf(#tile.neighbors, tile.x - tx + 32, tile.y - ty + 42, 400)
             end
         end
     end
