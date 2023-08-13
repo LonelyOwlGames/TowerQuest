@@ -26,9 +26,14 @@ local function drawFogOfWar(map, player, sx, sy)
     for i, _ in pairs(map.tileInstances) do
         for _, tile in pairs(map.tileInstances[i]) do
             if tile.light and tile.distance then -- If node has been processed correctly
-                love.graphics.setColor(0,0,0,(tile.light/255))
+                love.graphics.setColor(tile.light.r/255, tile.light.g/255, tile.light.b/255, tile.light.a/255)
                 love.graphics.rectangle('fill', tile.x - tx, tile.y - ty, 64, 64)
                 love.graphics.setColor(1,1,1,1)
+
+                -- DEBUG --
+                -- Draw tile alpha
+                love.graphics.printf(tile.light.a, tile.x - tx + 32, tile.y - ty + 32, 400)
+                love.graphics.printf(#tile.neighbors, tile.x - tx + 32, tile.y - ty + 42, 400)
             end
         end
     end
@@ -106,7 +111,8 @@ end
 
 -- :update Called when gameScreen is at top of stack.
 function State.gameScreen:update(dt)
-   map:update(dt)
+    map:update(dt)
+    Physics:update(dt)
 end
 
 -- Called only when gameScreen is at top of stack.

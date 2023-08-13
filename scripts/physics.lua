@@ -180,12 +180,52 @@ function Physics:getAllNodes()
                 table.insert(nodes, node)
 
                 -- Initialize light on all nodes
-                node.light = node.light or 255
+                node.light = node.light or {}
+                node.light.r = node.light.r or 0
+                node.light.g = node.light.g or 0
+                node.light.b = node.light.b or 0
+                node.light.a = node.light.a or 255
+                node.light.flicker = 0
             end
         end
     end
 
     return nodes
+end
+
+local flickerTimer = 0
+local function flicker(node, dt)
+    local tick = math.random(1.5,0.7)
+
+    node.light.flicker = node.light.flicker + dt
+    if node.light.flicker > tick then
+        node.light.r = math.random(200,250)
+        node.light.g = math.random(80,110)
+        node.light.b = math.random(0,15)
+        node.light.a = 50
+        node.light.flicker = 0
+    end
+end
+
+
+
+function Physics:updateFlickeringLights(dt)
+    for x, _ in pairs(self.nodes) do
+        for _, node in pairs(self.nodes[x]) do
+            if node.id then
+                if node.gid == 97 then
+                    flicker(node, dt)
+                    for _, neighborNode in pairs(node.neighbors) do
+                        flicker(neighborNode, dt)
+                        for _, neighborNeighborNode in pairs(neighborNode.neighbors) do
+                            flicker(neighborNeighborNode, dt)
+                        end
+
+                    end
+                end
+            end
+        end
+    end
 end
 
 function Physics:distance(nodeA, nodeB, cost)
@@ -207,38 +247,49 @@ function Physics:getMapValue(node)
     end
 end
 
-local function lightByAdjacentNodes(node, modifier)
-    -- Set starting opacity to black
-    local opacity = 255
+local function lightByAdjacentNodes(node)
+    -- BUG: For some reason having a floor underneath a wall tile causes node.light to be nil.
+    if not node.light then error('Found wall with floor underneath. Fix in Tiled.') end
+
+    node.light.a = 255
+
+    local average = 0
+    local averageCount = 0
 
     if node.neighbors then
         for i = 1, #node.neighbors do
-            if node.neighbors[i].layer.name == 'floor' then
-                opacity = opacity + (node.neighbors[i].light) - math.random(150,200)
+            if node.neighbors[i].layer.name == 'floor' and node.neighbors[i].seen then
+                average = average + node.neighbors[i].light.a
+                averageCount = averageCount + 1
             end
         end
-    end
 
-    node.light = opacity
+        average = average/averageCount
+    end
+    
+    if averageCount == 0 then average = 255 end
+    node.light.a = (math.floor(average))
 
     -- Since walls (or non-floors) are handled exclusively,
     -- we need to also handle .seen property here.
-    if node.light < (255) then
-        -- If the node's light has been modified, it's seen.
+    if node.light.a < (255) then
         node.seen = true
     end
 end
 
 function Physics:lightUpWallNodes()
     for _, node in pairs(self.listOfNodes) do
-        
+        -- BUG: For some reason having a floor underneath a wall tile causes node.light to be nil.
+        if not node.light then print(node.x/64, node.y/64) error('Found wall with floor underneath. Fix in Tiled.') end
+
+       
         -- If node is not a floor, then light by adjacent floor lighting
-        if node.layer.name == 'wall' then
-            lightByAdjacentNodes(node, 0)
+        if node.layer.name == 'wall' and node.light.a >= 51 then
+            lightByAdjacentNodes(node)
         end
 
         if node.hasObject then
-            lightByAdjacentNodes(node, 75)
+            lightByAdjacentNodes(node)
         end
     end
 end
@@ -275,7 +326,7 @@ function Physics:dijkstra(source)
 
         -- If distance < 15, adjust lighting. If distance < 11, mark tile as "seen" for minimap
         if currentNode.distance < 15 then
-            currentNode.light = math.max(currentNode.light + (currentNode.distance-math.random(25,75)), 0)
+            currentNode.light.a = math.max(currentNode.light.a + (currentNode.distance-math.random(25,75)), 50)
             if currentNode.distance < 11 then
                 currentNode.seen = true
             end
@@ -298,6 +349,13 @@ function Physics:dijkstra(source)
         end
     end
 end
+
+function Physics:update(dt)
+    self:updateFlickeringLights(dt)
+end
+
+
+
 
 return Physics
 
