@@ -9,9 +9,47 @@ function Physics:registerPlayer(player)
 end
 
 function Physics:registerMap(map)
-self.mapInfo = map
+    self.mapInfo = map
 
     -- Once map is loaded, we generate first dijkstra map.
+    self:generateDijkstraMap()
+end
+
+-- Return true or false if movement should be processed
+function Physics:checkCollisionAtDestination(collider)
+    local x, y = collider.x, collider.y
+    local destinationTile = self:getTile(x, y)
+    if destinationTile.distance > 10 then
+        if destinationTile.hasObject then
+            local object = destinationTile.hasObject
+
+            if object.onCollision then
+                object.onCollision(collider)
+                return true
+            end
+
+            if object.properties.isDoor then
+                object.properties.isDoorOpen = true
+                return false
+            end
+        end
+
+        return true
+    end
+end
+
+function Physics:moveTo(object, x, y)
+    local oldx, oldy = object.x, object.y
+
+    object.x = x
+    object.y = y
+
+    -- If collision occurs, revert change
+    if Physics:checkCollisionAtDestination(object) then
+        object.x = oldx
+        object.y = oldy
+    end
+
     self:generateDijkstraMap()
 end
 
@@ -34,15 +72,45 @@ function Physics:move(object, direction)
     if direction == 'right' then
         object.x = object.x + 1
     end
-    
-    local destinationTile = self:getTile(object.x, object.y)
-    if destinationTile.distance > 10 then
+
+    -- Check collision at destination
+    if self:checkCollisionAtDestination(object) then
         object.x = oldx
         object.y = oldy
     end
 
+
     self:generateDijkstraMap()
     -- Do turn
+end
+
+-- Returns a list {tile, object} from tiles with objects on them.
+function Physics:findTilesWithObjects()
+    if not self.nodes then return false end -- if nodes aren't generated.
+
+    local list = {}
+    for _, object in pairs(self.mapInfo.objects) do
+        if self.nodes[object.x/64] then
+            if self.nodes[object.x/64][(object.y/64)-1] then
+                table.insert(list, {tile = self.nodes[object.x/64][(object.y/64)-1],obj = object})
+            end
+        end
+    end
+
+    return list
+end
+
+-- After we generate node map, we go back and
+-- set the tile.distance of a tile that has an object
+-- on it to the sum of both the tile.distance and object.
+function Physics:processNodesWithObjects()
+    local list = self:findTilesWithObjects()
+
+    for _, data in pairs(list) do -- {tile, object}
+
+        -- Create a link to the object on the tile.
+        data.tile.hasObject = data.obj
+    end
 end
 
 function Physics:generateNodeMap(center_x, center_y)
@@ -128,8 +196,12 @@ function Physics:getMapValue(node)
     local basic = 1
     if node.layer.name == "wall" then
         return math.huge
-    elseif node.doorReference then
-        return math.huge
+    elseif node.hasObject and node.hasObject.name == 'door' then
+        if not node.hasObject.properties.isDoorOpen then
+            return math.huge
+        else
+            return basic
+        end
     else
         return basic
     end
@@ -160,9 +232,13 @@ end
 function Physics:lightUpWallNodes()
     for _, node in pairs(self.listOfNodes) do
         
-        -- If node is a wall, then light by adjacent floor lighting
-        if node.layer.name ~= 'floor' then
+        -- If node is not a floor, then light by adjacent floor lighting
+        if node.layer.name == 'wall' then
             lightByAdjacentNodes(node, 0)
+        end
+
+        if node.hasObject then
+            lightByAdjacentNodes(node, 75)
         end
     end
 end
@@ -176,6 +252,7 @@ function Physics:generateDijkstraMap()
     local currentTile = self.nodes[x][y]
 
     self:dijkstra(currentTile)
+    self:processNodesWithObjects()
 
     -- Special calculation for lighting on wall tiles.
     self:lightUpWallNodes()

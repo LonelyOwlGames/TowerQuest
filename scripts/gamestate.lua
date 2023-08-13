@@ -41,7 +41,7 @@ end
 local function drawMinimapOverlay(map, player, sx, sy)
     love.graphics.push()
         -- Scale down to keep consistent size arguments.
-        love.graphics.scale(0.1 * sx, 0.1 * sy)
+        love.graphics.scale(0.05 * sx, 0.05 * sy)
         for i, _ in pairs(map.tileInstances) do
             for _, tile in pairs(map.tileInstances[i]) do
                 if tile.seen then -- if tile's visibility has been modified
