@@ -24,6 +24,7 @@ function love.keypressed(key)
   end
 end
 
-function love.update()
-
+function love.update(dt)
 end
+
+

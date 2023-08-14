@@ -1,6 +1,8 @@
 local lume = require 'libraries.lume'
 local map = require 'scripts.map'
 local Physics = require 'scripts.physics'
+local Controller = require 'scripts.controller'
+local Camera = require 'libraries.Camera'
 
 local State = {}
 
@@ -15,19 +17,16 @@ State.inventoryScreen = {}
 -- drawFogOfWar(STI map, object player, scale zoom)
 -- Overlays black tiles based on tile light property
 -- Translates based on player x and y coordinates.
-local function drawFogOfWar(map, player, sx, sy)
+function State.gameScreen:drawFogOfWar()
     love.graphics.push()
 
-    local tx = (player.x * 64) - ((love.graphics.getWidth()/sx) / 2) + 32
-    local ty = (player.y * 64) - ((love.graphics.getHeight()/sy) / 2) + 32
-
     -- Loop through all tiles, and overlay a rectangle
-    love.graphics.scale(sx, sy) -- Apply same scale as map
-    for i, _ in pairs(map.tileInstances) do
-        for _, tile in pairs(map.tileInstances[i]) do
+    --love.graphics.scale(map.scaleX, map.scaleY) -- Apply same scale as map
+    for i, _ in pairs(map.map.tileInstances) do
+        for _, tile in pairs(map.map.tileInstances[i]) do
             if tile.light and tile.distance then -- If node has been processed correctly
                 love.graphics.setColor(tile.light.r/255, tile.light.g/255, tile.light.b/255, tile.light.a/255)
-                love.graphics.rectangle('fill', tile.x - tx, tile.y - ty, 64, 64)
+                love.graphics.rectangle('fill', tile.x, tile.y, 64, 64)
                 love.graphics.setColor(1,1,1,1)
 
                 -- DEBUG --
@@ -43,12 +42,12 @@ end
 -- drawMinimapOverlay (STI map, object player)
 -- Draw colored rectangles at every tile x, y based on
 -- tile.seen property set during dijkstra node gen.
-local function drawMinimapOverlay(map, player, sx, sy)
+function State.gameScreen:drawMinimapOverlay(player)
     love.graphics.push()
         -- Scale down to keep consistent size arguments.
-        love.graphics.scale(0.05 * sx, 0.05 * sy)
-        for i, _ in pairs(map.tileInstances) do
-            for _, tile in pairs(map.tileInstances[i]) do
+        love.graphics.scale(0.05 * self.camera.scale, 0.05 * self.camera.scale)
+        for i, _ in pairs(map.map.tileInstances) do
+            for _, tile in pairs(map.map.tileInstances[i]) do
                 if tile.seen then -- if tile's visibility has been modified
                     if tile.layer.name == 'wall' then
                         love.graphics.setColor(1, 0.5, 0.5, 0.8)
@@ -72,7 +71,14 @@ end
 -- This is ideally called once game has "started" - ONCE.
 function State.gameScreen:init()
     -- Initialize player object
-    self.playerInfo = require('scripts/class/playerClass')()
+    self.playerInfo = require('scripts/class/playerClass')(5,3)
+
+    -- Initialize Camera
+    self.camera = Camera()
+    self.camera.scale = 1.5
+    self.camera:setFollowStyle('NO_DEADZONE')
+    -- self.camera:setDeadzone(love.graphics.getWidth()/2 - 200, love.graphics.getHeight()/2 - 200, 200, 200)
+    self.camera:setFollowLerp(0.1)
 
     -- Register player as physics object
     Physics:registerPlayer(self.playerInfo)
@@ -85,40 +91,79 @@ function State.gameScreen:init()
 
     -- Canvas to be used for game
     self.canvas = love.graphics.newCanvas()
+
+    -- Initialize mouse controller system
+    Controller:init(self.playerInfo)
 end
 
 function State.gameScreen:enter(old_state)
 end
 
+function State.gameScreen:resize()
+    map:updateScale()
+end
+
 -- This function may be called from external game states
 -- to continue drawing game while in other menus.
 function State.gameScreen:draw()
-    local zoom = 1.5
-    local sx = love.graphics.getWidth()/1920 * zoom
-    local sy = love.graphics.getHeight()/1080 * zoom
+    -- love.graphics.setCanvas(self.canvas)
+    --     love.graphics.clear()
+    --     map:draw()
+    --     drawFogOfWar()
+    --     drawMinimapOverlay(self.playerInfo)
+    --     Controller:draw(map)
+    -- love.graphics.setCanvas()
 
-    love.graphics.setCanvas(self.canvas)
-        love.graphics.clear()
-        map:draw(self.playerInfo, sx, sy)
-        drawFogOfWar(map.map, self.playerInfo, sx, sy)
-        drawMinimapOverlay(map.map, self.playerInfo, sx, sy)
-    love.graphics.setCanvas()
+    --love.graphics.draw(self.canvas)
 
-    --love.graphics.translate(offsetx*2, offsety)
-    --love.graphics.scale(sx, sy)
-    love.graphics.draw(self.canvas)
+
+    self.camera:attach()
+        map:draw(self.camera, self.playerInfo)
+        self:drawFogOfWar()
+        love.graphics.setColor(0.5,1,0.5,0.8)
+        love.graphics.rectangle('line', self.playerInfo.sprite.x, self.playerInfo.sprite.y, 64, 64)
+        love.graphics.setColor(1,1,1,0.8)
+        love.graphics.rectangle('line', self.playerInfo.x*64, self.playerInfo.y*64, 64, 64)
+        love.graphics.setColor(1,1,1,1)
+        Controller:draw()
+    self.camera:detach()
+    
+    self.camera:draw()
+
+    self:drawMinimapOverlay(self.playerInfo)
+    -- Controller:draw(self.playerInfo, self.camera)
 end
 
 -- :update Called when gameScreen is at top of stack.
 function State.gameScreen:update(dt)
-    map:update(dt)
+    map:update(dt, self.playerInfo)
     Physics:update(dt)
+    Controller:update(dt, self.camera)
+
+    self.camera:update(dt)
+    self.camera:follow(self.playerInfo.sprite.x + 32, self.playerInfo.sprite.y + 32)
 end
 
 -- Called only when gameScreen is at top of stack.
 function State.gameScreen:keypressed(key)
     self.playerInfo:move(key)
     self.playerInfo:handleKeybinds(key)
+
+    if key == 'e' then
+        self.camera:shake(8, 1, 60)
+    end
+
+    if key == 'r' then
+        self.camera:flash(0.05, {1,0.2,0.2,1})
+    end
+
+    if key == 't' then
+        self.camera:fade(1, {0,0,0,1})
+    end
+end
+
+function State.gameScreen:mousepressed(x, y, button)
+    Controller:mousepressed(x, y, button)
 end
 
 ---------------------------------------------------------

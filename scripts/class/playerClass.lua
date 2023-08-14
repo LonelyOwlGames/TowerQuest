@@ -3,11 +3,15 @@ local Physics = require 'scripts.physics'
 
 local playerClass = Class{}
 
-function playerClass:init()
-    self.sprite = self.sprite or nil
+function playerClass:init(x, y)
+    self.sprite = self.sprite or {}
 
-    self.x = self.x or 0
-    self.y = self.y or 0
+    self.x = self.x or x
+    self.y = self.y or y
+
+    self.sprite.image = self.sprite.image or nil
+    self.sprite.x = self.sprite.x or self.x*64
+    self.sprite.y = self.sprite.y or self.y*64
 
     self.hp = self.hp or 100
     self.mana = self.mana or 100
@@ -15,24 +19,12 @@ function playerClass:init()
 
     self.inventory = self.inventory or {}
     self.inventoryMax = 29
+
+    self.moveQueue = {}
 end
 
-function playerClass:move(key)
-    if key == 'd' then
-        Physics:move(self, 'right')
-    end
-
-    if key == 'a' then
-        Physics:move(self, 'left')
-    end
-
-    if key == 'w' then
-        Physics:move(self, 'up')
-    end
-
-    if key == 's' then
-        Physics:move(self, 'down')
-    end
+function playerClass:move(tileX, tileY)
+    Physics:moveTo(self, tileX, tileY)
 end
 
 function playerClass:handleKeybinds(key)

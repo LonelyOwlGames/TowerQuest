@@ -16,72 +16,83 @@ function Physics:registerMap(map)
 end
 
 -- Return true or false if movement should be processed
-function Physics:checkCollisionAtDestination(collider)
-    local x, y = collider.x, collider.y
-    local destinationTile = self:getTile(x, y)
-    if destinationTile.distance > 10 then
+function Physics:checkCollisionAtDestination(destX, destY)
+    local destinationTile = self:getTile(destX, destY)
+
+    if not destinationTile then return true end
+
+    if destinationTile.distance == math.huge then
         if destinationTile.hasObject then
             local object = destinationTile.hasObject
 
             if object.onCollision then
-                object.onCollision(collider)
-                return true
-            end
-
-            if object.properties.isDoor then
-                object.properties.isDoorOpen = true
-                return false
+                return object.onCollision(collider)
             end
         end
 
         return true
     end
+    return false
 end
 
-function Physics:moveTo(object, x, y)
-    local oldx, oldy = object.x, object.y
+function Physics:moveTo(object, destX, destY)
 
-    object.x = x
-    object.y = y
+    local collision = self:checkCollisionAtDestination(destX, destY)
 
-    -- If collision occurs, revert change
-    if Physics:checkCollisionAtDestination(object) then
-        object.x = oldx
-        object.y = oldy
+    if collision then
+        return
     end
+
+    object.x = destX
+    object.y = destY
+
+    -- Sprite always lags behind physical object
+    table.insert(object.moveQueue, {x = destX, y = destY}) 
 
     self:generateDijkstraMap()
 end
 
-function Physics:move(object, direction)
-    -- Save current x, y to revert if move fails.
-    local oldx, oldy = object.x, object.y
+-- Called every :update
+function Physics:processMoves()
+    local playerMoveQueue = self.playerInfo.moveQueue
 
-    if direction == 'up' then
-        object.y = object.y - 1
+    -- Process move at top of heap first.
+    local moveData = playerMoveQueue[1]
+
+    if moveData then
+        local xVelocity
+        local yVelocity
+        
+        -- Target x & y position
+        local tx = moveData.x*64
+        local ty = moveData.y*64
+
+        local speed = 8
+
+        if tx > self.playerInfo.sprite.x then
+            xVelocity = speed
+        elseif tx < self.playerInfo.sprite.x then
+            xVelocity = -speed
+        end
+
+        if ty > self.playerInfo.sprite.y then
+            yVelocity = speed
+        elseif ty < self.playerInfo.sprite.y then
+            yVelocity = -speed
+        end
+
+        if xVelocity then
+            self.playerInfo.sprite.x = self.playerInfo.sprite.x + xVelocity
+        end
+
+        if yVelocity then
+            self.playerInfo.sprite.y = self.playerInfo.sprite.y + yVelocity
+        end
+
+        if self.playerInfo.sprite.x == tx and self.playerInfo.sprite.y == ty then
+            table.remove(playerMoveQueue, 1)
+        end
     end
-
-    if direction == 'down' then
-        object.y = object.y + 1
-    end
-
-    if direction == 'left' then
-        object.x = object.x - 1
-    end
-
-    if direction == 'right' then
-        object.x = object.x + 1
-    end
-
-    -- Check collision at destination
-    if self:checkCollisionAtDestination(object) then
-        object.x = oldx
-        object.y = oldy
-    end
-
-
-    self:generateDijkstraMap()
-    -- Do turn
 end
 
 -- Returns a list {tile, object} from tiles with objects on them.
@@ -369,8 +380,8 @@ end
 
 function Physics:update(dt)
     self:updateFlickeringLights(dt)
+    self:processMoves()
 end
-
 
 
 
