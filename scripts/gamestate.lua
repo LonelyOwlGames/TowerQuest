@@ -19,21 +19,33 @@ State.inventoryScreen = {}
 -- Translates based on player x and y coordinates.
 function State.gameScreen:drawFogOfWar()
     love.graphics.push()
-
     -- Loop through all tiles, and overlay a rectangle
     --love.graphics.scale(map.scaleX, map.scaleY) -- Apply same scale as map
     for i, _ in pairs(map.map.tileInstances) do
         for _, tile in pairs(map.map.tileInstances[i]) do
-            if tile.light and tile.distance then -- If node has been processed correctly
-                love.graphics.setColor(tile.light.r/255, tile.light.g/255, tile.light.b/255, tile.light.a/255)
-                love.graphics.rectangle('fill', tile.x, tile.y, 64, 64)
-                love.graphics.setColor(1,1,1,1)
-
-                -- DEBUG --
-                -- Draw tile alpha
-                --love.graphics.printf(tile.distance, tile.x - tx + 32, tile.y - ty + 32, 400)
-                --love.graphics.printf(#tile.neighbors, tile.x - tx + 32, tile.y - ty + 42, 400)
+            if tile.node then
+                -- love.graphics.printf(tile.node.distance, tile.x + 32, tile.y + 32, 400)
+                
+                local light = tile.light
+                if light then
+                    love.graphics.setColor(light.r/255, light.g/255, light.b/255, light.a/255)
+                    love.graphics.rectangle('fill', tile.x, tile.y, 64, 64)
+                    love.graphics.setColor(1,1,1,1)
+                end
             end
+            -- if tile.node.light and tile.node.distance then -- If node has been processed correctly
+            --     love.graphics.setColor(tile.node.light.r/255, tile.node.light.g/255, tile.node.light.b/255, tile.node.light.a/255)
+            --     love.graphics.rectangle('fill', tile.x, tile.y, 64, 64)
+            --     love.graphics.setColor(1,1,1,1)
+            --
+            --     -- DEBUG --
+            --     -- Draw tile alpa
+            --     -- if tile.node.previous then
+            --     -- love.graphics.printf(tile.node.distance, tile.x + 32, tile.y + 32, 400)
+            --     -- end
+            --     --love.graphics.printf(#tile.neighbors, tile.x - tx + 32, tile.y - ty + 42, 400)
+            -- end
+            -- 
         end
     end
     love.graphics.pop()
@@ -106,17 +118,6 @@ end
 -- This function may be called from external game states
 -- to continue drawing game while in other menus.
 function State.gameScreen:draw()
-    -- love.graphics.setCanvas(self.canvas)
-    --     love.graphics.clear()
-    --     map:draw()
-    --     drawFogOfWar()
-    --     drawMinimapOverlay(self.playerInfo)
-    --     Controller:draw(map)
-    -- love.graphics.setCanvas()
-
-    --love.graphics.draw(self.canvas)
-
-
     self.camera:attach()
         map:draw(self.camera, self.playerInfo)
         self:drawFogOfWar()
@@ -131,7 +132,6 @@ function State.gameScreen:draw()
     self.camera:draw()
 
     self:drawMinimapOverlay(self.playerInfo)
-    -- Controller:draw(self.playerInfo, self.camera)
 end
 
 -- :update Called when gameScreen is at top of stack.
@@ -146,7 +146,6 @@ end
 
 -- Called only when gameScreen is at top of stack.
 function State.gameScreen:keypressed(key)
-    self.playerInfo:move(key)
     self.playerInfo:handleKeybinds(key)
 
     if key == 'e' then
@@ -159,6 +158,10 @@ function State.gameScreen:keypressed(key)
 
     if key == 't' then
         self.camera:fade(1, {0,0,0,1})
+    end
+
+    if key == 'p' then
+        Physics:generateDijkstraMap()
     end
 end
 
