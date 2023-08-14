@@ -24,7 +24,6 @@ function State.gameScreen:drawFogOfWar()
     for i, _ in pairs(map.map.tileInstances) do
         for _, tile in pairs(map.map.tileInstances[i]) do
             if tile.node then
-                -- love.graphics.printf(tile.node.distance, tile.x + 32, tile.y + 32, 400)
                 
                 local light = tile.light
                 if light then
@@ -32,6 +31,9 @@ function State.gameScreen:drawFogOfWar()
                     love.graphics.rectangle('fill', tile.x, tile.y, 64, 64)
                     love.graphics.setColor(1,1,1,1)
                 end
+            end
+            if tile.seen then
+                --love.graphics.printf(tostring(tile.seen), tile.x + 32, tile.y + 32, 400)
             end
             -- if tile.node.light and tile.node.distance then -- If node has been processed correctly
             --     love.graphics.setColor(tile.node.light.r/255, tile.node.light.g/255, tile.node.light.b/255, tile.node.light.a/255)
@@ -92,6 +94,8 @@ function State.gameScreen:init()
     -- self.camera:setDeadzone(love.graphics.getWidth()/2 - 200, love.graphics.getHeight()/2 - 200, 200, 200)
     self.camera:setFollowLerp(0.1)
 
+    Physics:init()
+
     -- Register player as physics object
     Physics:registerPlayer(self.playerInfo)
 
@@ -132,6 +136,12 @@ function State.gameScreen:draw()
     self.camera:draw()
 
     self:drawMinimapOverlay(self.playerInfo)
+
+    love.graphics.printf('FPS: ' .. love.timer.getFPS(), love.graphics.getWidth() - 300, 20, 400)
+    love.graphics.printf('Texture Memory: ' .. math.floor(love.graphics.getStats().texturememory/1000000) .. 'mb', love.graphics.getWidth() - 300, 40, 400)
+    love.graphics.printf('Draw Calls: ' .. math.floor(love.graphics.getStats().drawcalls), love.graphics.getWidth() - 300, 60, 400)
+    love.graphics.printf('Garbage: ' .. collectgarbage('count'), love.graphics.getWidth() - 300, 80, 400)
+    love.graphics.printf('Physic Nodes: ' .. #Physics.nodes, love.graphics.getWidth() - 300, 100, 400)
 end
 
 -- :update Called when gameScreen is at top of stack.
@@ -162,6 +172,10 @@ function State.gameScreen:keypressed(key)
 
     if key == 'p' then
         Physics:generateDijkstraMap()
+    end
+
+    if key == 'x' then
+        self.playerInfo.viewDistance = self.playerInfo.viewDistance + 1
     end
 end
 

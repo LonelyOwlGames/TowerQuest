@@ -1,8 +1,12 @@
 local lume = require 'libraries.lume'
+local Lighting = require 'scripts.lighting'
 local Physics = {}
 
 Physics.listOfNodes = {}
 
+function Physics:init()
+    Lighting:init(self)
+end
 
 -- Register player as physics object separately
 function Physics:registerPlayer(player)
@@ -38,7 +42,6 @@ end
 
 function Physics:moveTo(object, destX, destY)
 
-
     local startNode = self:getNode(object.x, object.y)
     local endNode = self:getNode(destX, destY)
 
@@ -46,7 +49,9 @@ function Physics:moveTo(object, destX, destY)
     if not endNode then return end
     if not endNode.previous then return end
 
-    local path = self:findPath(endNode, startNode)
+    if #object.moveQueue > 0 then return end
+
+    local path = self:findPath(endNode, startNode, 20)
 
     for _, moveData in lume.ripairs(path) do
         destX = moveData.x
@@ -131,6 +136,7 @@ function Physics:findPath(start, goal, maximumCost)
     local costOfMove = (oldPrevious.distance - previous.distance)
     
     if actualCost + costOfMove > maximumCost then
+        path = {{x = goal.x, y = goal.y}}
         break
     else
         actualCost = actualCost + costOfMove
@@ -184,16 +190,23 @@ function Physics:createNode(x, y, tileObject, dist)
     return node
 end
 
-function Physics:generateNodeMap(center_x, center_y)
+function Physics:generateNodeMap(player)
     self.nodes = {}
+
+    
+    local center_x = player.x
+    local center_y = player.y
+
+    -- Limit the tiles processed to those visible on screen
+    local limit = (love.graphics.getWidth()/64)/2
 
     -- Insert valid tile references
     for k, _ in pairs(self.mapInfo.tileInstances) do
         for _, tile in pairs(self.mapInfo.tileInstances[k]) do
             local x, y = tile.x/64, tile.y/64
             
-            if x > center_x - 10 and x < center_x + 10 then
-                if y > center_y - 10 and y < center_y + 10 then
+            if x > center_x - limit and x < center_x + limit then
+                if y > center_y - limit and y < center_y + limit then
                     self.nodes[x] = self.nodes[x] or {}
                     self.nodes[x][y] = self:createNode(x, y, tile)
                     tile.node = self.nodes[x][y]
@@ -214,8 +227,9 @@ function Physics:getNode(x, y)
     return self.nodes[x] and self.nodes[x][y]
 end
 
-function Physics:getAllNodes()
+function Physics:getAllNodes(source, radius)
     local listOfNodes = {}
+
     for x, _ in pairs(self.nodes) do
         for _, node in pairs(self.nodes[x]) do
             if node then
@@ -228,57 +242,6 @@ function Physics:getAllNodes()
     return listOfNodes
 end
 
--- function Physics:flicker(node, dt)
---     node.light.flicker = node.light.flicker + dt
---
---     if node.light.flicker > node.light.tick then
---         node.light.r = math.random(200,250)
---         node.light.g = math.random(80,110)
---         node.light.b = math.random(0,15)
---         node.light.a = 25
---     end
---
---     node.light.tick = math.random(0.2,0.8) 
--- end
-
--- function Physics:flickerInit(node)
---     node.light.flicker = 0
---     node.light.tick = 0
---     table.insert(self.listOfFlickeringTiles, node)
--- end
---
--- function Physics:processListOfTorches()
---     self.listOfTorches = {}
---     self.listOfFlickeringTiles = {}
---
---     for x, _ in pairs(self.nodes) do
---         for _, node in pairs(self.nodes[x]) do
---             if node.id and node.seen and node.gid == 97 then
---                 table.insert(self.listOfTorches, node)
---                 self:flickerInit(node) 
---
---                 for _, neighborNode in pairs(node.neighbors) do
---                     if neighborNode.y >= node.y and neighborNode.seen then
---                         self:flickerInit(neighborNode) 
---
---                         for _, neighborNeighborNode in pairs(neighborNode.neighbors) do
---                             if neighborNeighborNode.y >= node.y and neighborNeighborNode.seen then
---                                 self:flickerInit(neighborNeighborNode) 
---                             end
---                         end
---                     end
---                 end
---             end
---         end
---     end
--- end
---
--- function Physics:updateFlickeringLights(dt)
---     for _, node in pairs(self.listOfFlickeringTiles) do
---         self:flicker(node, dt)
---     end
--- end
---
 function Physics:distance(nodeA, nodeB, costOfMove)
     local dx, dy = nodeA.x - nodeB.x, nodeA.y - nodeB.y
     return (costOfMove or 1) * (math.abs(dx) + math.abs(dy))
@@ -286,7 +249,7 @@ end
 
 function Physics:getMapValue(node)
     if node.tileObject.layer.name == 'wall' then
-        return math.huge
+        return 255
     else
         return 1
     end
@@ -295,92 +258,19 @@ function Physics:getMapValue(node)
 --     elseif node.hasObject and node.hasObject.name == 'door' then
 --         if not node.hasObject.properties.isDoorOpen then
 --             return math.huge
---         else
---             return basic
---         end
---     elseif node.layer.name == 'entities' then
---         return math.huge
---     else
---         return basic
---     end
--- end
 end
---
-function Physics:lightByAdjacentNodes(node)
-    -- BUG: For some reason having a floor underneath a wall tile causes node.light to be nil.
-
-    local light = node.tileObject.light
-
-    light.a = 255
-
-    local average = 0
-    local averageCount = 0
-
-    local neighbors = self:getNeighbors(node)
-    if neighbors then
-        for i = 1, #neighbors do
-            if neighbors[i].tileObject.layer.name == 'floor' and neighbors[i].tileObject.seen then
-                average = average + neighbors[i].tileObject.light.a
-                averageCount = averageCount + 1
-            end
-        end
-
-        average = average/averageCount
-    end
-    
-    if averageCount == 0 then average = 255 end
-    light.a = (math.floor(average))
-    -- Since walls (or non-floors) are handled exclusively,
-    -- we need to also handle .seen property here.
-    if light.a < (255) then
-        node.tileObject.seen = true
-    end
-end
-
-function Physics:lightUpWallNodes()
-    for x, _ in pairs(self.nodes) do
-        for y, node in pairs(self.nodes[x]) do
-            if node.tileObject.light then
-                
-                if node.tileObject.layer.name == 'wall' then
-                    Physics:lightByAdjacentNodes(node)
-                end
-            end
-        end
-    end
-
-
-    for _, node in pairs(self.listOfNodes) do
-        -- BUG: For some reason having a floor underneath a wall tile causes node.light to be nil.
-        if not node.light then print(node.x/64, node.y/64) error('Found wall with floor underneath. Fix in Tiled.') end
-
-       
-        -- If node is not a floor, then light by adjacent floor lighting
-        if node.layer.name == 'wall' and node.light.a >= 51 then
-            lightByAdjacentNodes(node)
-        end
-
-        if node.hasObject then
-            lightByAdjacentNodes(node)
-        end
-    end
-end
-
 
 function Physics:generateDijkstraMap(custom_x, custom_y)
     local x = custom_x or self.playerInfo.x
     local y = custom_y or self.playerInfo.y
 
-    self:generateNodeMap(x, y)
+    -- Generate nodes from tiles based on player position
+    self:generateNodeMap(self.playerInfo)
 
     local currentTile = self.nodes[x][y]
 
-    self:dijkstra(currentTile)
-    -- self:processNodesWithObjects()
-
-    -- Special calculation for lighting on wall tiles.
-    self:lightUpWallNodes()
-    -- self:processListOfTorches()
+    -- Assign node values using Dijsktra algorithm
+    self:dijkstra(currentTile, self.playerInfo)
 end
 
 local cardinalVectors = {{x = 0, y = -1}, {x = -1, y = 0}, {x = 1, y = 0}, {x = 0, y = 1}}
@@ -395,7 +285,7 @@ function Physics:getNeighbors(n)
     return neighbors
 end
 
-function Physics:dijkstra(source)
+function Physics:dijkstra(source, player)
     local listOfNodes = self:getAllNodes() -- Get list of all nodes
     for _, node in ipairs(listOfNodes) do
         node.distance = math.huge
@@ -407,20 +297,20 @@ function Physics:dijkstra(source)
 
 
     while (#listOfNodes > 0) do
+
+        -- Pop first node in heap to currentNode
         local currentNode = listOfNodes[1]
         table.remove(listOfNodes, 1)
 
-        -- If distance < 15, adjust lighting. If distance < 11, mark tile as "seen" for minimap
-        if currentNode.distance < 10 then
-            currentNode.tileObject.light.a = math.max(currentNode.tileObject.light.a + (currentNode.distance-math.random(25,75)), 25)
-            if currentNode.distance < 9 then
-                currentNode.tileObject.seen = true
-            end
-        end
+        Lighting:calculateNodeLight(currentNode, player.viewDistance) 
 
-		-- If node is not proceesed, break. (straggler nodes along edges)
+
         if currentNode.distance == math.huge then break end
 
+        -- Process distance weights for all cardinal neighbors.
+        -- Since source is not a neighbor, it will have no previous
+        -- Once every neighbor is calculated, sort listOfNods to push
+        -- unprocessed nodes to top of stack to be popped.
         local neighbors = self:getNeighbors(currentNode)
         for _, neighborNode in ipairs(neighbors) do
             local costOfMoveToNeighborNode = self:getMapValue(neighborNode)
@@ -434,10 +324,11 @@ function Physics:dijkstra(source)
             end
         end
     end
+
+    collectgarbage()
 end
 
 function Physics:update(dt)
-    -- self:updateFlickeringLights(dt)
     self:processMoves()
 end
 

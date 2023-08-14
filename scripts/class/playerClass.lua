@@ -21,6 +21,8 @@ function playerClass:init(x, y)
     self.inventoryMax = 29
 
     self.moveQueue = {}
+
+    self.viewDistance = 3 
 end
 
 function playerClass:move(tileX, tileY)
