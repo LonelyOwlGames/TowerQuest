@@ -51,7 +51,7 @@ function Physics:moveTo(object, destX, destY)
 
     if #object.moveQueue > 0 then return end
 
-    local path = self:findPath(endNode, startNode, 20)
+    local path = self:findPath(endNode, startNode, 30)
 
     for _, moveData in lume.ripairs(path) do
         destX = moveData.x
@@ -116,13 +116,15 @@ function Physics:processMoves()
         if self.playerInfo.sprite.x == tx and self.playerInfo.sprite.y == ty then
             self:generateDijkstraMap(tx/64, ty/64)
             table.remove(playerMoveQueue, 1)
+            Lighting:calculateVisibility(self:getNode(self.playerInfo.x, self.playerInfo.y))
         end
     end
 end
 
 function Physics:findPath(start, goal, maximumCost)
     local path = {{x = start.x, y = start.y}}
-    local previous, oldPrevious = start
+    local previous = start
+    local oldPrevious = start
 
     local actualCost = 0
     maximumCost = maximumCost or math.huge
@@ -134,7 +136,7 @@ function Physics:findPath(start, goal, maximumCost)
     if not previous then return start end
 
     local costOfMove = (oldPrevious.distance - previous.distance)
-    
+
     if actualCost + costOfMove > maximumCost then
         path = {{x = goal.x, y = goal.y}}
         break
@@ -186,37 +188,36 @@ function Physics:createNode(x, y, tileObject, dist)
         tileObject = tileObject or nil,
     }
 
-
     return node
 end
 
 function Physics:generateNodeMap(player)
     self.nodes = {}
 
-    
     local center_x = player.x
     local center_y = player.y
 
     -- Limit the tiles processed to those visible on screen
-    local limit = (love.graphics.getWidth()/64)/2
+    local limit = math.floor((love.graphics.getWidth()/64)/2.6)
 
     -- Insert valid tile references
     for k, _ in pairs(self.mapInfo.tileInstances) do
         for _, tile in pairs(self.mapInfo.tileInstances[k]) do
             local x, y = tile.x/64, tile.y/64
-            
+
             if x > center_x - limit and x < center_x + limit then
                 if y > center_y - limit and y < center_y + limit then
                     self.nodes[x] = self.nodes[x] or {}
                     self.nodes[x][y] = self:createNode(x, y, tile)
                     tile.node = self.nodes[x][y]
 
-                    tile.light = tile.light or {}
-                    tile.light.r = tile.light.r or 0
-                    tile.light.g = tile.light.g or 0
-                    tile.light.b = tile.light.b or 0
-                    tile.light.a = tile.light.a or 255
-                    tile.light.flicker = tile.light.flicker or 0
+                    Lighting:initializeNodeLight(tile)
+                    -- tile.light = tile.light or {}
+                    -- tile.light.r = tile.light.r or 0
+                    -- tile.light.g = tile.light.g or 0
+                    -- tile.light.b = tile.light.b or 0
+                    -- tile.light.a = tile.light.a or 255
+                    -- tile.light.flicker = tile.light.flicker or 0
                 end
             end
         end
@@ -227,7 +228,7 @@ function Physics:getNode(x, y)
     return self.nodes[x] and self.nodes[x][y]
 end
 
-function Physics:getAllNodes(source, radius)
+function Physics:getAllNodes()
     local listOfNodes = {}
 
     for x, _ in pairs(self.nodes) do
@@ -249,15 +250,10 @@ end
 
 function Physics:getMapValue(node)
     if node.tileObject.layer.name == 'wall' then
-        return 255
+        return math.huge
     else
         return 1
     end
---     if node.layer.name == "wall" then
---         return math.huge
---     elseif node.hasObject and node.hasObject.name == 'door' then
---         if not node.hasObject.properties.isDoorOpen then
---             return math.huge
 end
 
 function Physics:generateDijkstraMap(custom_x, custom_y)
@@ -286,12 +282,16 @@ function Physics:getNeighbors(n)
 end
 
 function Physics:dijkstra(source, player)
+    self.debug = love.timer.getTime()
+    
     local listOfNodes = self:getAllNodes() -- Get list of all nodes
     for _, node in ipairs(listOfNodes) do
         node.distance = math.huge
         node.previous = nil
     end
 
+
+    self.debugText = #listOfNodes
     source.distance = 0
     table.sort(listOfNodes, function(nodeA, nodeB) return nodeA.distance < nodeB.distance end)
 
@@ -302,7 +302,6 @@ function Physics:dijkstra(source, player)
         local currentNode = listOfNodes[1]
         table.remove(listOfNodes, 1)
 
-        Lighting:calculateNodeLight(currentNode, player.viewDistance) 
 
 
         if currentNode.distance == math.huge then break end
@@ -317,6 +316,8 @@ function Physics:dijkstra(source, player)
             local distanceToNeighborNode = self:distance(currentNode, neighborNode, costOfMoveToNeighborNode)
             local alt = currentNode.distance + distanceToNeighborNode
 
+            Lighting:calculateNodeLight(neighborNode, player.viewDistance) 
+
             if alt < neighborNode.distance then
                 neighborNode.distance = alt
                 neighborNode.previous = currentNode
@@ -326,13 +327,15 @@ function Physics:dijkstra(source, player)
     end
 
     collectgarbage()
+
+    -- self.debugText = self.debug - love.timer.getTime()
+    self.debug = 0
+    
 end
 
 function Physics:update(dt)
     self:processMoves()
 end
-
-
 
 return Physics
 

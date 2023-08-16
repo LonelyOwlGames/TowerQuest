@@ -1,68 +1,80 @@
 local sti = require 'libraries/sti'
+local ProcGen = require 'scripts.procedural'
 
 local map = {}
 
-function map:load(player)
-    -- Load a map exported from Tiled.
-    self.map = sti('tilemap/map.lua')
+-------------------------------------------------------------------
+-- This system is responsible for recieving generated map data
+-- and translating it into a visual and physical map.
+-------------------------------------------------------------------
 
-    -- Instead of using Tiled Properties in the GUI
-    -- we instantiate properties manually to suite our needs here.
-    for _, object in pairs(self.map.objects) do
-        if object.name == 'door' then
-            object.properties.isDoor = true
-            object.properties.isDoorOpen = false
+function map:init()
 
-            object.onCollision = function(collider)
-                object.properties.isDoorOpen = true
-                self:replaceTile(object, 26)
+    self.tileSize = 64
+    self.tileset = love.graphics.newImage('tilemap/Tileset.png')
 
-                if object.properties.isDoorOpen then
-                    return false
-                else
-                    return true
-                end
+    local tile = love.graphics.newQuad(0 * self.tileSize, 0 * self.tileSize, self.tileSize, self.tileSize, self.tileset:getWidth(), self.tileset:getHeight())
+
+    self.spriteBatch = love.graphics.newSpriteBatch(self.tileset, 25 * 23)
+
+    local mapData = ProcGen:createNewMap()
+
+    self:load(mapData)
+end
+
+function map:load(mapData)
+    for y = 1, #mapData do
+        for x = 1, #mapData[y] do
+            if mapData[y][x] and mapData[y][x].type ~= 'empty' then
+                local tile = self:_createTile(mapData[y][x])
+
+                self.spriteBatch:add(tile, x*64, y*64)
             end
-        end
 
-        if object.name == 'doorLocked' then
-            object.properties.isDoor = true
-            object.properties.isDoorOpen = false
-            object.properties.isDoorLocked = true
-            object.properties.key = 'door'
-
-            object.onCollision = function(collider)
-                error('Need to program key functionality')
-            end
+            -- if mapData[y][x] and mapData[y][x].type == 'empty' then
+            --     mapData[y][x].type = 'test'
+            --     local tile = self:_createTile(mapData[y][x])
+            --
+            --     self.spriteBatch:add(tile, x*64, y*64)
+            -- end
         end
     end
 end
 
-function map:replaceTile(object, newid)
-    local instance = false
-    for _, ti in pairs(self.map.tileInstances[object.gid]) do
-        if ti.x == object.x and ti.y == (object.y-64) then
-            instance = ti
-            break
-        end
-    end
+function map:reload()
+    local mapData = ProcGen:createNewMap()
 
-    if instance ~= false then
-        local new_tile = self.map.tiles[newid]
-        instance.batch:set(instance.id, new_tile.quad, instance.x, instance.y)
-    end
+    self.spriteBatch:clear()
+    self:load(mapData)
 end
 
+function map:update(dt)
 
-function map:draw(camera, player)
-    self.map:draw()
 end
 
--- TODO: Translate calculation can be moved to turnsystem callback since
--- it really isn't needed every frame (since player position won't ever change outside
--- of the turnsystem)
-function map:update(dt, playerInfo)
-    self.map:update(dt) 
+function map:draw()
+    love.graphics.draw(self.spriteBatch, -200, -400)
+end
+
+local GID = {
+    ['floor'] = 25,
+    ['wall'] = 4,
+    ['test'] = 40,
+    ['door'] = 8
+}
+
+function map:_createTile(cell)
+    local gid = GID[cell.type] or assert(cell.type, 'map: _createTile | cell missing type property')
+
+    -- Convert GID to spriteBatch x & y coordinates.
+    local line = math.floor(gid/25)
+    local x = gid - (line * 25)
+    local y = line
+
+    -- Create a Quad based on cell data for rendering spritebatch
+    local quad = love.graphics.newQuad(x*64, y*64, 64, 64, self.tileset:getWidth(), self.tileset:getHeight())
+
+    return quad
 end
 
 return map
