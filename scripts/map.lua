@@ -31,12 +31,12 @@ function map:load(mapData)
                 self.spriteBatch:add(tile, x*64, y*64)
             end
 
-            -- if mapData[y][x] and mapData[y][x].type == 'empty' then
-            --     mapData[y][x].type = 'test'
-            --     local tile = self:_createTile(mapData[y][x])
-            --
-            --     self.spriteBatch:add(tile, x*64, y*64)
-            -- end
+            if mapData[y][x] and mapData[y][x].type == 'empty' then
+                mapData[y][x].type = 'test'
+                local tile = self:_createTile(mapData[y][x])
+
+                self.spriteBatch:add(tile, x*64, y*64)
+            end
         end
     end
 end
