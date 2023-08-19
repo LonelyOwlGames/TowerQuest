@@ -3,6 +3,7 @@ local map = require 'scripts.map'
 local Physics = require 'scripts.physics'
 local Controller = require 'scripts.controller'
 local Camera = require 'libraries.Camera'
+local ProcGen = require 'scripts.procedural'
 
 local State = {}
 
@@ -15,7 +16,7 @@ State.inventoryScreen = {}
 ----------------------------------------------
 function State.gameScreen:init()
     -- Initialize player object
-    self.playerInfo = require('scripts/class/playerClass')(5,3)
+    self.playerInfo = require('scripts/class/playerClass')(22,9)
 
     -- Initialize Camera
     self.camera = Camera()
@@ -49,11 +50,11 @@ end
 function State.gameScreen:draw()
     self.camera:attach()
         map:draw()
-        love.graphics.setColor(0.5,1,0.5,0.8)
-        love.graphics.rectangle('line', self.playerInfo.sprite.x, self.playerInfo.sprite.y, 64, 64)
-        love.graphics.setColor(1,1,1,0.8)
-        love.graphics.rectangle('line', self.playerInfo.x*64, self.playerInfo.y*64, 64, 64)
-        love.graphics.setColor(1,1,1,1)
+        -- love.graphics.setColor(0.5,1,0.5,0.8)
+        -- love.graphics.rectangle('line', self.playerInfo.sprite.x, self.playerInfo.sprite.y, 64, 64)
+        -- love.graphics.setColor(1,1,1,0.8)
+        -- love.graphics.rectangle('line', self.playerInfo.x*64, self.playerInfo.y*64, 64, 64)
+        -- love.graphics.setColor(1,1,1,1)
         Controller:draw()
     self.camera:detach()
     
@@ -68,6 +69,10 @@ function State.gameScreen:draw()
 
     if Physics.debugText then
         love.graphics.printf('Debug Timer: ' .. Physics.debugText, love.graphics.getWidth() - 300, 120, 400)
+    end
+
+    if ProcGen.debugText then
+        love.graphics.printf('Debugger: ' .. ProcGen.debugText, love.graphics.getWidth() - 300, 120 ,400)
     end
 end
 
@@ -102,6 +107,10 @@ function State.gameScreen:keypressed(key)
 
     if key == 'space' then
         map:reload()
+    end
+
+    if key == 'n' then
+        ProcGen:reset()
     end
 
     if key == 'x' then

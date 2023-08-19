@@ -10,6 +10,11 @@ local State = require 'scripts/gamestate'
 local game = {}
 
 function love.load()
+
+  for i = 1, 100 do
+    math.random()
+  end
+  
   -- Initialize player object from class
   Gamestate.registerEvents()
   Gamestate.switch(State.gameScreen)
