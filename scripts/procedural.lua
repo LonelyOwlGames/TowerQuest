@@ -4,11 +4,7 @@ local Room = require 'scripts.class.roomClass'
 
 local test = Room()
 
--- Git test
-
--- This is going to be 
--- a new git test
--- for testing lazy
+-- And finally, one last Git test
 
 local ProcGen = {}
 
