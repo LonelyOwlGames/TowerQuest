@@ -32,7 +32,7 @@ function map:load(mapData)
             end
 
             if mapData[y][x] and mapData[y][x].type == 'empty' then
-                mapData[y][x].type = 'test'
+                mapData[y][x].type = 'empty'
                 local tile = self:_createTile(mapData[y][x])
 
                 self.spriteBatch:add(tile, x*64, y*64)
@@ -59,8 +59,9 @@ end
 local GID = {
     ['floor'] = 25,
     ['wall'] = 4,
-    ['test'] = 40,
-    ['door'] = 8
+    ['empty'] = 40,
+    ['door'] = 8,
+    ['room'] = 22,
 }
 
 function map:_createTile(cell)

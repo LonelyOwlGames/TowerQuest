@@ -1,4 +1,8 @@
 local lume = require 'libraries.lume'
+local Prefab = require 'scripts.prefabs'
+local Room = require 'scripts.class.roomClass'
+
+local test = Room()
 
 
 local ProcGen = {}
@@ -62,6 +66,9 @@ local function _getGridOffsets(grid)
         if node.type == 'floor' then
             table.insert(listOfXNodes, node.x)
             table.insert(listOfYNodes, node.y)
+        elseif not node.type then
+            table.insert(listOfXNodes, node.x)
+            table.insert(listOfYNodes, node.y)
         end
     end
 
@@ -109,12 +116,17 @@ local function _convertGridToCells(grid, ox, oy)
     for _, node in pairs(grid) do
         node.x = node.x - ox + 1
         node.y = node.y - oy + 1
-        if cells[node.y][node.x] and node.type then
-            cells[node.y][node.x].type = node.type
-            if cells[node.y][node.x].doorDirection then
-                cells[node.y][node.x].doorDirection = node.doorDirection
-            end
+        if cells[node.y] and cells[node.y][node.x] then
+            cells[node.y][node.x] = node
+        else
+            error()
         end
+        -- if cells[node.y][node.x] and node.type then
+            -- cells[node.y][node.x].type = node.type
+            -- if cells[node.y][node.x].doorDirection then
+            --     cells[node.y][node.x].doorDirection = node.doorDirection
+            -- end
+        -- end
     end
 
     return cells
@@ -189,7 +201,7 @@ function ProcGen:generateCircleRoom(radius)
     -- Create an empty hyperSpace to iterate over
     for y = 1, hyperSpaceY do
         for x = 1, hyperSpaceX do
-            table.insert(grid, {x = x, y = y})
+            table.insert(grid, {x = x, y = y, type = 'empty'})
         end
     end
 
@@ -394,6 +406,16 @@ local function _combineRoom(roomA, roomB, randomX, randomY)
                 if cell.type == 'floor' then
                     newRoom[ny][nx].type = 'floor'
                 end
+
+                if cell.type == 'door' then
+                    newRoom[ny][nx].type = 'door'
+                end
+
+                if cell.type == 'wall' then
+                    if newRoom[ny][nx].type == 'empty' then
+                        newRoom[ny][nx].type = 'wall'
+                    end
+                end
             end
         end
     end
@@ -474,23 +496,23 @@ function ProcGen:addDoorsToRoom(room)
 
                 if not room[y+1] then
                     if room[y][x+1] and room[y][x+1].type == 'wall' then
-                        if room[y][x-1].type == 'wall' then
+                        if room[y][x-1] and room[y][x-1].type == 'wall' then
                             table.insert(southDoorCandidates, cell)
                         end
                     end
                 end
 
-                if not room[x+1] then 
+                if not room[y][x+1] then 
                     if room[y+1] and room[y+1][x].type == 'wall' then
-                        if room[y-1][x].type == 'wall' then
+                        if room[y-1] and room[y-1][x].type == 'wall' then
                             table.insert(eastDoorCandidates, cell)
                         end
                     end
                 end
 
-                if not room[x-1] then
+                if not room[y][x-1] then
                     if room[y+1] and room[y+1][x].type == 'wall' then
-                        if room[y-1][x].type == 'wall' then
+                        if room[y-1] and room[y-1][x].type == 'wall' then
                             table.insert(westDoorCandidates, cell)
                         end
                     end
@@ -533,13 +555,40 @@ function ProcGen:generateRoomForGridDungeon(ratio)
     return cells
 end
 
+local function _loadFromPrefab(name, index)
+    if not Prefab[name] then assert(name, 'Incorrect Prefab Name for _loadFromPrefab') end
+    if index > #Prefab[name] then assert(index, 'Incorrect index value for Prefab') end
+
+    local grid = Prefab[name][index]
+    local cells = {}
+
+    for y = 1, #grid do
+        cells[y] = {}
+        for x = 1, #grid[y] do
+            cells[y][x] = {}
+
+            if grid[y][x] == 0 then
+                cells[y][x] = _createCell({x = x, y = y, type = 'empty'})
+            elseif grid[y][x] == 1 then
+                cells[y][x] = _createCell({x = x, y = y, type = 'floor'})
+            elseif grid[y][x] == 2 then
+                cells[y][x] = _createCell({x = x, y = y, type = 'wall'})
+            elseif grid[y][x] == 3 then
+                cells[y][x] = _createCell({x = x, y = y, type = 'door'})
+            end
+        end
+    end
+
+    return cells    
+end
+
 -- Generates a dungeon full of random sized rooms
 function ProcGen:generateRoom(ratio)
     local cells = {}
 
     self.debugText = ratio
 
-    if ratio < 15 then -- Big rooms
+    if ratio < 20 then -- Big rooms
         local r = math.random(1, 4)
 
         if r == 1 then
@@ -559,7 +608,7 @@ function ProcGen:generateRoom(ratio)
             local a = self:generateCARoom(20,20)
             cells = a
         end
-    elseif ratio >= 15 and ratio < 40 then -- medium rooms
+    elseif ratio >= 20 then
         local r = math.random(1, 5)
 
         if r == 1 then
@@ -589,32 +638,9 @@ function ProcGen:generateRoom(ratio)
             local a = self:generateCARoom(12,12)
             cells = a
         end
-    elseif ratio >= 40 then -- small rooms
-        local r = math.random(1, 4)
-
-        if r == 1 then
-            local a = self:generateSquareRoom(math.random(3,4),math.random(3,4))
-            local b = self:generateCircleRoom(1)
-            cells = _combineRoom(a, b, math.random(-1, 1), math.random(-1, 1))
-        elseif r == 2 then
-            local a = self:generateCircleRoom(1)
-            local b = self:generateSquareRoom(math.random(2,3), math.random(2,3))
-            cells = _combineRoom(a, b, math.random(-1, 1),0)
-        elseif r == 3 then
-            local a = self:generateSquareRoom(math.random(4,5), math.random(2, 3))
-            cells = a
-        elseif r == 4 then
-            local a = self:generateSquareRoom(math.random(2, 3), math.random(4, 5))
-            cells = a
-        end
     end
 
-
-    -- Authored p    -- 2. Add walls to the boundry of the generated room
     self:addWallsToRoom(cells)
-    self:addDoorsToRoom(cells)
-
-    -- end
 
     return cells
 end
@@ -624,48 +650,83 @@ local function _convertCellsToGrid(cells)
 
     for y = 1, #cells do
         for x = 1, #cells[y] do
-            table.insert(grid, {x = x, y = y, type = cells[y][x].type, doorDirection = cells[y][x].doorDirection})
+            -- table.insert(grid, {x = x, y = y, type = cells[y][x].type, doorDirection = cells[y][x].doorDirection})
+            table.insert(grid, cells[y][x])
         end
     end
 
     return grid
 end
 
-function _copyRoomIntoDungeon(room, dungeon, x, y)
-    local cells = {}
-    
+local function _copyRoomIntoDungeon(room, dungeon, x, y)
+    local listOfRoomCells = {}
+
     x = math.floor(x)
     y = math.floor(y)
 
     for _, node in pairs(room) do
         if node.type ~= 'empty' then
             dungeon[y + node.y][x + node.x] = node
+            table.insert(listOfRoomCells, node)
         end
     end
 
+    return listOfRoomCells
 end
 
 local function _doesRoomFitIntoDungeon(room, dungeon, x, y, direction)
     x = math.floor(x)
     y = math.floor(y)
 
-    if direction == 'north' then y = y - 1 end
-    if direction == 'south' then y = y + 1 end
-    if direction == 'west' then x = x - 1 end
-    if direction == 'east' then x = x + 1 end
+    -- if direction == 'north' then y = y - 2 end
+    -- if direction == 'south' then y = y + 2 end
+    -- if direction == 'west' then x = x - 2 end
+    -- if direction == 'east' then x = x + 2 end
+
+    local overlappingWalls = {}
+    local overlappingFloorCount = 0
 
     for _, node in pairs(room) do
-        --if node.type ~= 'empty' then
-            if not dungeon[y + node.y] then return false end
-            if not dungeon[y + node.y][x + node.x] then return false end
-            if dungeon[y + node.y][x + node.x].type ~= 'empty' then return false end
-            
-            -- local target = dungeon[y][x]
-            -- if node.type == 'floor' and target.type ~= 'floor' then return false end
-            -- if node.type == 'wall' and target.type ~= 'wall' then return false end
-        -- end
+        local nx = x + node.x
+        local ny = y + node.y
+        local target
+
+        -- If location is off the map, return false
+        if dungeon[ny] and dungeon[ny][nx] then
+            target = dungeon[ny][nx]
+        end
+
+        if target then
+            -- Compare room 'Wall' tiles to dungeon tiles.
+            if node.type == 'wall' then
+
+                -- If a wall tile in our room is overlapping a wall tile in the dungeon
+                -- Count how many overlap to determine if it fits well
+                if target.type == 'wall' then
+                    node._isOverlappingWall = true
+                    table.insert(overlappingWalls, node)
+                else
+                    node._isOverlappingWall = false
+                end
+            end
+
+            -- Now cycle through the floor tiles to determine if they are overlapping
+            -- any other floor tiles in the map. Since walls can overlap, we ignore that.
+            if node.type == 'floor' then
+                if target.type == 'floor' or target.type == 'wall' then
+                    overlappingFloorCount = overlappingFloorCount + 1
+                end
+            end
+        end
     end
-    return true
+
+    -- If enough walls overlap, check if any other cells overlap in the dungeon
+    if #overlappingWalls > 0 and overlappingFloorCount == 0 then
+        return true
+    else
+        return false
+    end
+
 end
 
 function ProcGen:addHallway(room)
@@ -729,7 +790,7 @@ function ProcGen:placeRandomRoom(room, dungeon, totalAttempts)
     local yBoundary = dungeonHeight - roomHeight - 1
 
     
-    local tries = 1000
+    local tries = 100
 
     -- Attempt 10 positions, then generate new room.
     for n = 1, tries do
@@ -737,8 +798,8 @@ function ProcGen:placeRandomRoom(room, dungeon, totalAttempts)
         local y = math.random(1, yBoundary)
 
         if _doesRoomFitIntoDungeon(roomGrid, dungeon, x, y) then
-            _copyRoomIntoDungeon(roomGrid, dungeon, x, y)
-            return true
+            local newRoom = _copyRoomIntoDungeon(roomGrid, dungeon, x, y)
+            return newRoom
         end
 
         if n >= tries then
@@ -889,10 +950,10 @@ local function _getNeighborsByCell(cells, start)
     local x = start.x
     local y = start.y
 
-    if cells[y+2] and cells[y+2][x] and cells[y+2][x].type == 'empty' then cells[y+2][x].direction = 'south' table.insert(list, cells[y+2][x]) end
-    if cells[y-2] and cells[y-2][x] and cells[y-2][x].type == 'empty' then cells[y-2][x].direction = 'north' table.insert(list, cells[y-2][x]) end
-    if cells[y] and cells[y][x+2] and cells[y][x+2].type == 'empty' then cells[y][x+2].direction = 'east' table.insert(list, cells[y][x+2]) end
-    if cells[y] and cells[y][x-2] and cells[y][x-2].type == 'empty' then cells[y][x-2].direction = 'west' table.insert(list, cells[y][x-2]) end
+    if cells[y+1] and cells[y+1][x] then table.insert(list, cells[y+1][x]) end
+    if cells[y-1] and cells[y-1][x] then table.insert(list, cells[y-1][x]) end
+    if cells[y] and cells[y][x+1] then table.insert(list, cells[y][x+1]) end
+    if cells[y] and cells[y][x-1] then table.insert(list, cells[y][x-1]) end
 
     return list
 end
@@ -928,7 +989,7 @@ function ProcGen:generateHallways(dungeon, start)
 
                 -- Choose one of the unvisited neighbors
                 -- local select = unvisitedNeighbors[math.random(1, #unvisitedNeighbors)]
-                local select = unvisitedNeighbors[1]
+                local select = unvisitedNeighbors[math.random(1, #unvisitedNeighbors)]
 
                 local x = current.x
                 local y = current.y
@@ -958,12 +1019,43 @@ function ProcGen:generateHallways(dungeon, start)
     _flood(dungeon, start)
 end
 
+local function _removeBadDoorsFromDungeon(dungeon)
+    for y = 1, #dungeon do
+        for x = 1, #dungeon[y] do
+            if dungeon[y][x].type == 'door' then
+                local door = dungeon[y][x]
+
+                local up = dungeon[y-1][x]
+                local down = dungeon[y+1][x]
+                local left = dungeon[y][x-1]
+                local right = dungeon[y][x+1]
+
+                local count = 0
+                if up and up.type == 'floor' then count = count + 1 end
+                if down and down.type == 'floor' then count = count + 1 end
+                if left and left.type == 'floor' then count = count + 1 end
+                if right and right.type == 'floor' then count = count + 1 end
+
+                if up and up.type == 'empty' then count = 0 end
+                if down and down.type == 'empty' then count = 0 end
+                if left and left.type == 'empty' then count = 0 end
+                if right and right.type == 'empty' then count = 0 end
+
+                if count ~= 2 then
+                    door.type = 'wall'
+                end
+            end
+        end
+    end
+end
+
 
 function ProcGen:generateDungeon()
     -- local dungeon = dungeon or {}
 
-    local width, height = 49, 29
+    local width, height = 75, 50
 
+    self.dungeon = nil
     if self.dungeon == nil then
         self.dungeon = {}
 
@@ -993,60 +1085,60 @@ function ProcGen:generateDungeon()
         return math.floor((floorCells / wallCells)*100)
     end
 
-    local success = true
-    local roomCount = 0
-    while (true) do
+    -- self.dungeon = self:generateRoom(10)
+
+
+    local success
+    self.rooms = {}
+
+    -- if _getFloorToWallRatio(self.dungeon) == 0 then
+    --     local startingRoom = self:generateRoom(10)
+    --     startingRoom = _convertCellsToGrid(startingRoom)
+    --     _copyRoomIntoDungeon(startingRoom, self.dungeon, 10, 10)
+    -- else
+    --     for i = 1, 10 do
+    --         local ratio = _getFloorToWallRatio(self.dungeon)
+    --         local room = self:generateRoom(ratio)
+    --         success = self:placeRandomRoom(room, self.dungeon)
+    --     end
+    -- end
+    local startingRoom = self:generateRoom(10)
+    startingRoom = _convertCellsToGrid(startingRoom)
+    startingRoom = _copyRoomIntoDungeon(startingRoom, self.dungeon, 10,10)
+    table.insert(self.rooms, startingRoom)
+    
+    local density = 20
+    while (#self.rooms <= math.min(density, 25)) do
         local ratio = _getFloorToWallRatio(self.dungeon)
+
         local room = self:generateRoom(ratio)
         success = self:placeRandomRoom(room, self.dungeon)
 
-        roomCount = roomCount + 1
-        if not success then break end
-    end
 
-    if roomCount <= 10 then
-        self:reset()
-        return self:generateDungeon()
-    end
-
-    local listOfPotentialHallways = {}
-    for y = 1, #self.dungeon do
-        for x = 1, #self.dungeon[y] do
-            if y % 2 == 0 and x % 2 == 0 then
-                if self.dungeon[y][x].type == 'empty' then
-                    table.insert(listOfPotentialHallways, self.dungeon[y][x])
-                end
+        if not success then
+            if #self.rooms <= density - 2 then
+                self:generateDungeon()
+            else
+                break
             end
+        else
+            table.insert(self.rooms, success)
         end
     end
 
-    -- while (#listOfPotentialHallways > 0) do
-    --     local select = listOfPotentialHallways[1]
-    --     table.remove(listOfPotentialHallways, 1)
-    --
-    --     self:generateHallways(self.dungeon, select)
-    -- end
+    -- _removeBadDoorsFromDungeon(self.dungeon)
 
-    for y = 1, #self.dungeon do
-        for x = 1, #self.dungeon[y] do
-            if self.dungeon[y][x].type == 'empty' then
-                self.dungeon[y][x].type = 'floor'
-
-                if y == 1 then
-                    self.dungeon[y][x].type = 'wall'
-                elseif x == 1 then
-                    self.dungeon[y][x].type = 'wall'
-                elseif x == width then
-                    self.dungeon[y][x].type = 'wall'
-                elseif y == height then
-                    self.dungeon[y][x].type = 'wall'
-                end
+    for _, data in pairs(self.rooms) do
+        for _, node in pairs(data) do
+            if node._isOverlappingWall then
+                self.dungeon[node.y][node.x].type = 'door'
             end
         end
     end
 
     return self.dungeon
 end
+
 
 function ProcGen:createNewMap()
     local mapData = self:generateDungeon()
