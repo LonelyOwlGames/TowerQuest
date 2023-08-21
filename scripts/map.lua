@@ -1,5 +1,6 @@
 local sti = require 'libraries/sti'
 local ProcGen = require 'scripts.procedural'
+local Dungeon = require 'scripts.class.dungeonClass'
 
 local map = {}
 
@@ -17,7 +18,8 @@ function map:init()
 
     self.spriteBatch = love.graphics.newSpriteBatch(self.tileset, 25 * 23)
 
-    local mapData = ProcGen:createNewMap()
+    -- local mapData = ProcGen:createNewMap()
+    local mapData = Dungeon():buildDungeon()
 
     self:load(mapData)
 end
@@ -42,10 +44,10 @@ function map:load(mapData)
 end
 
 function map:reload()
-    local mapData = ProcGen:createNewMap()
+    -- local mapData = ProcGen:createNewMap()
 
-    self.spriteBatch:clear()
-    self:load(mapData)
+    -- self.spriteBatch:clear()
+    -- self:load(mapData)
 end
 
 function map:update(dt)
@@ -62,6 +64,7 @@ local GID = {
     ['empty'] = 40,
     ['door'] = 8,
     ['room'] = 22,
+    ['black'] = 113,
 }
 
 function map:_createTile(cell)

@@ -1,8 +1,16 @@
+----------------------------------------
+-- Summary Test.
+-- This is a test of descriptions
+-- @module procedural
+-- @alias ProcGen
+-- @author Me
+-- @copyright None
+-- @license None
+-- @release None
+
 local lume = require 'libraries.lume'
 local Prefab = require 'scripts.prefabs'
 local Room = require 'scripts.class.roomClass'
-
-local test = Room()
 
 -- And finally, one last Git test
 
@@ -31,6 +39,9 @@ local ProcGen = {}
 
 -- A *grid* is a binary 2D array with x, y coordinates and 0, 1 value based on if it exists
 
+
+--- Creates a cell object.
+-- Going to be depracted soon
 local function _createCell(args)
 
     local cell = {
@@ -160,7 +171,10 @@ local function _getNeighbors(grid, node, filter)
     return neighbors
 end
 
--- Get's number of neighbors that meet filter criteria (or floor)
+--- Get's number of neighbors that meet filter criteria (or floor)
+-- @param cells
+-- @param cell
+-- @param filter
 local function _getNeighborCountByCell(cells, cell, filter)
     local count = 0
     local x = cell.x
@@ -174,8 +188,13 @@ local function _getNeighborCountByCell(cells, cell, filter)
 
     return count
 end
+--~-~-~-~-~-~-~-~-~-~-~-~-~-~--
+--  [[ Private Functions ]]  --
+--~-~-~-~-~-~-~-~-~-~-~-~-~-~--
 
--- width, height parameters are maximums.
+
+--- Generate square room
+-- @treturn cells List of cells
 function ProcGen:generateSquareRoom(width, height)
     local grid = {}
 
@@ -424,7 +443,6 @@ local function _combineRoom(roomA, roomB, randomX, randomY)
     -- Now we must take out table full of cells, and convert it to a grid.
     -- Using a grid, we can calculate how much we need to move the entire room
     -- left and up in order to prune excess empty tiles.
-    --------------------------------------------------------------------------
     local grid = {}
 
     -- Copy combined room cells into a new grid
@@ -550,7 +568,6 @@ function ProcGen:generateRoomForGridDungeon(ratio)
     local size = math.floor(ratio / 15)
     size = size + (size / 2)
     size = math.floor(size)
-    print(size)
     cells = self:generateSquareRoom(math.random(4,10 - size), math.random(4,10 - size))
 
     return cells
