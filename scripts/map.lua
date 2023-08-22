@@ -19,12 +19,15 @@ function map:init()
     self.spriteBatch = love.graphics.newSpriteBatch(self.tileset, 25 * 23)
 
     -- local mapData = ProcGen:createNewMap()
-    local mapData = Dungeon():buildDungeon()
+    self.Dungeon = Dungeon()
+    self.mapData = self.Dungeon:buildDungeon()
 
-    self:load(mapData)
+    self:load(self.mapData)
 end
 
 function map:load(mapData)
+    mapData = mapData.tiles
+
     for y = 1, #mapData do
         for x = 1, #mapData[y] do
             if mapData[y][x] and mapData[y][x].type ~= 'empty' then
@@ -44,10 +47,10 @@ function map:load(mapData)
 end
 
 function map:reload()
-    -- local mapData = ProcGen:createNewMap()
+    self.mapData = self.Dungeon:buildDungeon()
 
-    -- self.spriteBatch:clear()
-    -- self:load(mapData)
+    self.spriteBatch:clear()
+    self:load(self.mapData)
 end
 
 function map:update(dt)
@@ -56,6 +59,21 @@ end
 
 function map:draw()
     love.graphics.draw(self.spriteBatch, -200, -400)
+
+    for _, room in pairs(self.mapData.listOfRooms) do
+        for y = 1, #room.tiles do
+            for x = 1, #room.tiles[y] do
+                local tile = room.tiles[y][x]
+                -- love.graphics.rectangle('fill', x*64 - 200, y*64 - 400, 64, 64)
+                love.graphics.printf(tile.roomId, tile.x*64 - 200, tile.y*64 - 400, 400)
+            end
+        end
+    end
+    -- for y = 1, #self.mapData.tiles do
+    --     for x = 1, #self.mapData.tiles[y] do
+    --         love.graphics.printf(self.mapData.tiles[y][x].roomId, x*64 - 200, y*64 - 400, 400)
+    --     end
+    -- end
 end
 
 local GID = {
@@ -64,7 +82,7 @@ local GID = {
     ['empty'] = 40,
     ['door'] = 8,
     ['room'] = 22,
-    ['black'] = 113,
+    ['black'] = 112,
 }
 
 function map:_createTile(cell)

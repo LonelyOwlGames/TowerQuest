@@ -47,9 +47,27 @@ function tileClass:setPosition(x, y)
     return self
 end
 
+function tileClass:setProperty(property, value)
+    self[property] = value
+end
+
+function tileClass:hasProperty(property)
+    if self[property] then return true else return false end
+end
+
+function tileClass:getProperty(property)
+    if self:hasProperty(property) then
+        return self[property]
+    else
+        error('Tried to get property from tile that does not have property')
+    end
+end
+
 --- Set tile Object roomid
 -- @param room
 function tileClass:setRoom(room)
+    if not room then return end
+
     self.roomId = room.id
     self.room = room
     return self
