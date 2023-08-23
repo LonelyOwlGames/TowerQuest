@@ -288,6 +288,33 @@ function roomClass:setTile(x, y, type)
     self.tiles[y][x]:setType(type)
 end
 
+-- Needs to return 2D array of self.tiles
+function roomClass:getSerializedRoomTiles()
+    local serializeTileData = {}
+
+   for y = 1, #self.tiles do
+        for x = 1, #self.tiles[y] do
+            local sid = self.tiles[y][x]:serialize()
+
+
+            serializeTileData[sid] = self.tiles[y][x].serializeData
+        end
+    end
+
+    return serializeTileData
+end
+
+
+-- dungeon ->
+--  roomid -> data{
+--                 tileId -> data
+--                 tileId -> data
+--                 tileId -> data
+--  roomid -> data{
+--                 tileId -> data
+--                 tileId -> data
+--                 tileId -> data
+
 function roomClass:getTile(x, y)
     if self.tiles[y] and self.tiles[y][x] then
         return self.tiles[y][x]
@@ -414,7 +441,30 @@ function roomClass:createRoomFromTable(width, height, table)
     return self
 end
 
+-- dungeon ->
+--  roomid -> data{
+--                 tileId -> data
+--                 tileId -> data
+--                 tileId -> data
+--  roomid -> data{
+--                 tileId -> data
+--                 tileId -> data
+--                 tileId -> data
 
+
+-- Tiles in Room are Serialized by {key = {tileData}}
+function roomClass:serialize()
+    local serializeTileData = self:getSerializedRoomTiles()
+
+    self.serializeData = {}
+    self.serializeData.tiles = serializeTileData
+    self.serializeData.x = self.x
+    self.serializeData.y = self.y
+    self.serializeData.id = self.id
+    self.serializeData.dungeon = self.dungeon
+
+    return self.serializeData
+end
 
 
 return roomClass

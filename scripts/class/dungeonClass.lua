@@ -9,7 +9,11 @@
 -- Class declaration.
 local Class = require 'libraries.hump.class'
 local roomClass = require 'scripts.class.roomClass'
+local lume = require 'libraries.lume'
+local Timer = require 'libraries.hump.timer'
+local bitser = require 'libraries.bitser'
 local dungeonClass = Class{}
+
 
 local id = 0
 
@@ -18,9 +22,11 @@ function dungeonClass:init(width, height)
     id = id + 1
     self.id = id
 
+    self.loadPercent = 0
+
     self.width = width or 50
     self.height = height or 50
-    self.maxDensity = 0.1 -- % to fill. (max ~70-80%)
+    self.maxDensity = 0.5 -- % to fill. (max ~70-80%)
 
     -- Create map buffer of empty tiles.
     self.tiles = roomClass():createRoomBuffer(self.width, self.height, 'black')
@@ -119,15 +125,17 @@ end
 function dungeonClass:getDensity()
     local fullCells = 0
 
-    for y = 1, #self.tiles do
-        for x = 1, #self.tiles[y] do
-            if not self.tiles[y][x]:getType('black') then
-                fullCells = fullCells + 1
+    for _, room in pairs(self.listOfRooms) do
+        for y = 1, #room.tiles do
+            for x = 1, #room.tiles[y] do
+                if not room.tiles[y][x]:getType('empty') then
+                    fullCells = fullCells + 1
+                end
             end
         end
     end
 
-    return fullCells/(#self.tiles * #self.tiles[1])
+    return fullCells/(self.width * self.height)
 end
 
 
@@ -305,32 +313,78 @@ function dungeonClass:copyRoomIntoDungeon(room, x, y)
     table.insert(self.listOfRooms, room)
 end
 
+function dungeonClass:serialize(instance)
+    -- local grid = {}
+
+    -- for _, room in pairs(self.listOfRooms) do
+    --     for y = 1, #room.tiles do
+    --         for x = 1, #room.tiles[y] do
+    --             table.insert(grid, room.tiles[y][x]:serialize())
+    --         end
+    --     end
+    -- end
+    --
+    --
+    local data = {}
+    for _, room in pairs(self.listOfRooms) do
+        local roomData = room:serialize() -- Returns room.serializeData containing tile.serializeData's
+        data[room.id] = roomData
+    end
+
+    -- Let's look at serialize data... lol
+    -- for _,b in pairs(data) do
+    --     for _,d in pairs(b) do
+    --         if type(d) == 'table' then
+    --             for _,f in pairs(d) do
+    --                 for g,h in pairs(f) do
+    --                     print(g,h)
+    --                 end
+    --             end
+    --         end
+    --     end
+    -- end
+
+    local binary_data = bitser.dumps(data)
+    return binary_data
+end
+
+function dungeonClass:update(dt)
+    print('d')
+end
+
+function dungeonClass:addRoomIntoDungeon()
+    -- local density = self:getDensity()
+
+    -- if density < self.maxDensity then
+        local room = self:generateRandomRoom()
+        self:throwRoomAtDungeon(room)
+    -- end
+
+    self.loadPercent = self:getDensity()
+
+    return self:getLoadPercent()
+end
+
 --- Builder method for dungeon generation.
 -- recursively creates rooms, and adds them to
 -- the current dungeon.
 -- @treturn table mapData A 2D array (table) full of tiles.
 local steps = 0
 function dungeonClass:buildDungeon()
-    self.listOfRooms = {}
     if #self.listOfRooms < 1 then
         local startingRoom = self:generateRandomRoom()
         self:addRoom(startingRoom, 0, 0)
     end
 
+    self:addRoomIntoDungeon()
 
 
-    local function _step()
-        local density = self:getDensity()
 
-        if density < self.maxDensity then
-            local room = self:generateRandomRoom()
-            self:throwRoomAtDungeon(room)
-        end
-    end
-
-    for i = 1, 10 do
-        _step()
-    end
+    -- for i = 1, 10 do
+    --     _step()
+    --     self:addLoadPercent(10)
+    --     love.timer.sleep(0.1)
+    -- end
     --
     -- for _, room in pairs(self.listOfRooms) do
     --     room:addDoorsToRoom()
@@ -363,6 +417,14 @@ function dungeonClass:buildDungeon()
 
 
     return self
+end
+
+function dungeonClass:addLoadPercent(percent)
+    self.loadPercent = self.loadPercent + percent
+end
+
+function dungeonClass:getLoadPercent()
+    return self.loadPercent
 end
 
 return dungeonClass

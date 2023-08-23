@@ -252,4 +252,41 @@ function tileClass:clean()
     return self
 end
 
+-- dungeon ->
+--  roomid -> data{
+--                 tileId -> data
+--                 tileId -> data
+--                 tileId -> data
+--  roomid -> data{
+--                 tileId -> data
+--                 tileId -> data
+--                 tileId -> data
+
+
+-- Initialize tile object, then immediately deserialize to assign
+-- properties
+function tileClass:deserialize(...)
+    local args = {...}
+
+    for key, data in pairs(args) do
+        self[key] = data
+    end
+
+    return self
+end
+
+function tileClass:serialize()
+    local t = {}
+    
+    for key, data in pairs(self) do
+        if key ~= 'localNeighbors' and key ~= 'worldNeighbors' and key ~= 'room' then
+            t[key] = data
+        end
+    end
+
+    self.serializeData = t
+
+    return self.id
+end
+
 return tileClass

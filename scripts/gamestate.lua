@@ -76,6 +76,7 @@ end
 function State.gameScreen:update(dt)
     Physics:update(dt)
     Controller:update(dt, self.camera)
+    map:update(dt)
 
     self.camera:update(dt)
     self.camera:follow(self.playerInfo.sprite.x + 32, self.playerInfo.sprite.y + 32)
