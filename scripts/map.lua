@@ -20,18 +20,21 @@ local threadCode = [[
     local Dungeon = require 'scripts.class.dungeonClass'
     require('love.timer')
 
+    local preview = true
 
-    local min, max = ...
     local newDungeon = Dungeon()
     while newDungeon:getDensity() < newDungeon.maxDensity do
-        newDungeon:buildDungeon() 
-        love.thread.getChannel('load'):push({newDungeon:getDensity(), newDungeon.maxDensity})
+        newDungeon:buildDungeon(preview) 
+        love.thread.getChannel('load'):push({newDungeon:getDensity(), newDungeon.maxDensity, #newDungeon.listOfRooms})
+
+        local serialized = newDungeon:serialize(newDungeon)
+        love.thread.getChannel('info'):push(serialized)
     end
 
    
-    local serialized = newDungeon:serialize(newDungeon)
+    -- local serialized = newDungeon:serialize(newDungeon)
 
-    love.thread.getChannel('info'):push(serialized)
+    -- love.thread.getChannel('info'):push(serialized)
 
 ]]
 
@@ -54,7 +57,7 @@ function map:update(dt)
     timer = timer + dt
     local info = love.thread.getChannel('info'):pop()
 
-    if info and not self.mapData then
+    if info then
         self.mapData = info
         self:load()
     end
@@ -110,19 +113,28 @@ function map:reload()
 end
 
 local progress = 0
+local roomsLoaded = 0
 function map:draw()
+
+    -- Draw map outline
+    love.graphics.rectangle('line', 0, 0, 64*50, 64*50)
+
     love.graphics.draw(self.spriteBatch, -200, -400)
 
     local test = love.thread.getChannel('load'):pop()
 
     if test then
         progress = math.floor(math.min(test[1]*10/test[2]*10,100))
+        roomsLoaded = test[3] or roomsLoaded
     end
 
+
     if progress > 0 and progress <= 100 then
+        love.graphics.setColor(0.2,0.2,0.2,0.8)
         love.graphics.rectangle('fill', love.graphics.getWidth() /2 - 200, love.graphics.getHeight() - 100, 1000, 50)
-        love.graphics.setColor(0.5,1,0.7,1)
-        love.graphics.rectangle('fill', love.graphics.getWidth() / 2 - 195, love.graphics.getHeight() - 95, (1000/100)*progress, 50)
+        love.graphics.setColor(0.5,1,0.7,0.5)
+        love.graphics.rectangle('fill', love.graphics.getWidth() / 2 - 195, love.graphics.getHeight() - 95, (1000/100)*progress, 40)
+        love.graphics.printf(roomsLoaded, love.graphics.getWidth() / 2 - 195, love.graphics.getHeight() - 50, 400)
     end
 
     if false then

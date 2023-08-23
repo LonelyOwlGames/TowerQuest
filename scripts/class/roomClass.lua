@@ -22,6 +22,8 @@ function roomClass:init()
 
     self.x = 1
     self.y = 1
+
+    self.connectedRooms = {}
 end
 
 -- Rooms are comprised of a 2D table called .tiles.
@@ -80,6 +82,10 @@ function roomClass:setPosition(x, y)
     end
 
     return self
+end
+
+function roomClass:addConnectedRoom(id)
+    self.connectedRooms[#self.connectedRooms+1] = id
 end
 
 --- Returns room width in tiles.

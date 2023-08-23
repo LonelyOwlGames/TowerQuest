@@ -70,8 +70,6 @@ end
 function tileClass:getProperty(property)
     if self:hasProperty(property) then
         return self[property]
-    else
-        error('Tried to get property from tile that does not have property')
     end
 end
 
