@@ -3,7 +3,6 @@ local map = require 'scripts.map'
 local Physics = require 'scripts.physics'
 local Controller = require 'scripts.controller'
 local Camera = require 'libraries.Camera'
-local ProcGen = require 'scripts.procedural'
 
 local State = {}
 
@@ -71,9 +70,6 @@ function State.gameScreen:draw()
         love.graphics.printf('Debug Timer: ' .. Physics.debugText, love.graphics.getWidth() - 300, 120, 400)
     end
 
-    if ProcGen.debugText then
-        love.graphics.printf('Debugger: ' .. ProcGen.debugText, love.graphics.getWidth() - 300, 120 ,400)
-    end
 end
 
 -- :update Called when gameScreen is at top of stack.

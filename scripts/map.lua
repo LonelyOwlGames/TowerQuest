@@ -26,21 +26,16 @@ function map:init()
 end
 
 function map:load(mapData)
-    mapData = mapData.tiles
-
-    for y = 1, #mapData do
-        for x = 1, #mapData[y] do
-            if mapData[y][x] and mapData[y][x].type ~= 'empty' then
-                local tile = self:_createTile(mapData[y][x])
-
-                self.spriteBatch:add(tile, x*64, y*64)
-            end
-
-            if mapData[y][x] and mapData[y][x].type == 'empty' then
-                mapData[y][x].type = 'empty'
-                local tile = self:_createTile(mapData[y][x])
-
-                self.spriteBatch:add(tile, x*64, y*64)
+    for _, room in pairs(mapData.listOfRooms) do
+        for y = 1, #room.tiles do
+            for x = 1, #room.tiles[y] do
+                local tile = room.tiles[y][x]
+                local quad = self:_createTile(tile)
+                local tx, ty = tile:getWorldPosition()
+                
+                if not tile:getType('empty') then
+                    self.spriteBatch:add(quad, tx*64, ty*64)
+                end
             end
         end
     end
@@ -60,15 +55,20 @@ end
 function map:draw()
     love.graphics.draw(self.spriteBatch, -200, -400)
 
+
     for _, room in pairs(self.mapData.listOfRooms) do
         for y = 1, #room.tiles do
             for x = 1, #room.tiles[y] do
                 local tile = room.tiles[y][x]
                 -- love.graphics.rectangle('fill', x*64 - 200, y*64 - 400, 64, 64)
-                love.graphics.printf(tile.roomId, tile.x*64 - 200, tile.y*64 - 400, 400)
+                if not tile:getType('empty') then
+                love.graphics.printf(tile:getType(), tile.wx*64 - 200, tile.wy*64 - 400, 400)
+                end
             end
         end
     end
+    love.graphics.setColor(0.1, 0.1, 0.1, 0.1)
+    love.graphics.rectangle('fill', -200, -400, 50*64, 50*64)
     -- for y = 1, #self.mapData.tiles do
     --     for x = 1, #self.mapData.tiles[y] do
     --         love.graphics.printf(self.mapData.tiles[y][x].roomId, x*64 - 200, y*64 - 400, 400)

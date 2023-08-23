@@ -18,12 +18,17 @@ function tileClass:init()
 
     self.roomId = nil
     self.room = nil
+    self.dungeon = nil
 
     self.localNeighbors = {} -- Neighbors inside room.
     self.worldNeighbors = {} -- Neighbors in dungeon
 
     self.x = 0
     self.y = 0
+
+    self.wx = 0
+    self.wy = 0
+
     self.type = 'empty'
 end
 
@@ -40,9 +45,16 @@ end
 --- set tileObject.x and tileObject.y dynamically
 -- @param x
 -- @param y
-function tileClass:setPosition(x, y)
+function tileClass:setLocalPosition(x, y)
     self.x = x
     self.y = y
+
+    return self
+end
+
+function tileClass:setWorldPosition(x, y)
+    self.wx = x
+    self.wy = y
 
     return self
 end
@@ -142,6 +154,29 @@ function tileClass:updateWorldNeighbors()
     end
 end
 
+--- Super important accessor function.
+-- Because of how lua uses references, and me being bad at coding
+-- this is my work around. When tiles are copied into the dungeon,
+-- they are marked 'dirty' and calls this function. This function
+-- finds the corresponding tile in the dungeon class, and assigns
+-- it the properties that match the roomTiles property.
+function tileClass:updateProperties()
+    -- if not self.dungeon then return false end
+    --
+    -- local tile = self.dungeon.tiles[self.y][self.x]
+    -- tile:setPosition(self:getPosition())
+    -- tile:setProperty('roomId', self.roomId)
+    -- tile:setProperty('room', self.room)
+    -- tile:setProperty('localNeighbors', self.localNeighbors)
+    -- tile:setProperty('worldNeighbors', self.worldNeighbors)
+    --
+    -- if not self:getType('empty') then tile:setType(self:getType()) end
+end
+
+function tileClass:updatePosition()
+
+end
+
 --- Returns table of neighbors based on type filter
 -- Return a table of either local or world neighbors, based
 -- on filter parameter provided for tile 'type'. Might add
@@ -175,8 +210,12 @@ end
 
 --- Returns position of tile Object
 -- @return (x,y) position of tile.
-function tileClass:getPosition()
+function tileClass:getLocalPosition()
     return self.x, self.y
+end
+
+function tileClass:getWorldPosition()
+    return self.wx, self.wy
 end
 
 --- Builder function for tiles.
@@ -188,7 +227,8 @@ end
 -- @return self for chaining function calls
 function tileClass:createTile(room, x, y, type)
     self:setType(type)
-    self:setPosition(x,y)
+    self:setLocalPosition(x,y)
+    self:setWorldPosition(x,y)
     self:setRoom(room)
 
     return self
@@ -205,8 +245,10 @@ end
 --- Clean dirty tiles by reassigning key valus
 -- @return self for chaining function calls
 function tileClass:clean()
+    self:updatePosition()
     self:updateLocalNeighbors()
     self:updateWorldNeighbors()
+    self:updateProperties()
     return self
 end
 

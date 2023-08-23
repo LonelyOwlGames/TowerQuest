@@ -19,6 +19,9 @@ function roomClass:init()
 
     id = id + 1
     self.id = id
+
+    self.x = 1
+    self.y = 1
 end
 
 -- Rooms are comprised of a 2D table called .tiles.
@@ -64,6 +67,21 @@ function roomClass:setDirty()
     return self
 end
 
+function roomClass:setPosition(x, y)
+    self.x = x
+    self.y = y
+
+    for oldy = 1, #self.tiles do
+        for oldx = 1, #self.tiles[oldy] do
+            local tile = self.tiles[oldy][oldx]
+
+            tile:setWorldPosition(x + oldx, y + oldy)
+        end
+    end
+
+    return self
+end
+
 --- Returns room width in tiles.
 -- by iterating over ever [y] value and then
 -- pushing the largest x value to the top of a 
@@ -97,11 +115,12 @@ function roomClass:getRoomWidth(excludeEmpties)
     local roomXPos, _ = self:getPositionInWorld()
 
     -- Subtract world position by largest x value to get width
-    if self.dungeon then
-        return width
-    else
-        return width - roomXPos + 1
-    end
+    -- if self.dungeon then
+    --     return width
+    -- else
+    --     return width - roomXPos + 1
+    -- end
+    return width - roomXPos + 1
 end
 
 --- Returns room height in tiles
@@ -135,11 +154,12 @@ function roomClass:getRoomHeight(excludeEmpties)
     local _, roomYPos = self:getPositionInWorld()
 
     -- Subtract world Y position by room Y position for height
-    if self.dungeon then
-        return height
-    else
-        return height - roomYPos + 1
-    end
+    -- if self.dungeon then
+    --     return height
+    -- else
+    --     return height - roomYPos + 1
+    -- end
+    return height - roomYPos + 1
 end
 
 function roomClass:getRoomDimensions(excludeEmpties)
@@ -151,24 +171,25 @@ end
 -- offsets applied to their respective x & y values.
 -- @return (x,y) x & y position in world.
 function roomClass:getPositionInWorld()
-    local listOfXTiles = {}
-    local listOfYTiles = {}
-
-    for y = 1, #self.tiles do
-        for x = 1, #self.tiles[y] do
-            local tile = self.tiles[y][x]
-
-            if not tile:getType('empty') then
-                table.insert(listOfXTiles, tile.x)
-                table.insert(listOfYTiles, tile.y)
-            end
-        end
-    end
-
-    table.sort(listOfXTiles, function(a,b) return a < b end)
-    table.sort(listOfYTiles, function(a,b) return a < b end)
-
-    return listOfXTiles[1], listOfYTiles[1]
+    return self.x, self.y
+    -- local listOfXTiles = {}
+    -- local listOfYTiles = {}
+    --
+    -- for y = 1, #self.tiles do
+    --     for x = 1, #self.tiles[y] do
+    --         local tile = self.tiles[y][x]
+    --
+    --         if not tile:getType('empty') then
+    --             table.insert(listOfXTiles, tile.wx)
+    --             table.insert(listOfYTiles, tile.wy)
+    --         end
+    --     end
+    -- end
+    --
+    -- table.sort(listOfXTiles, function(a,b) return a < b end)
+    -- table.sort(listOfYTiles, function(a,b) return a < b end)
+    --
+    -- return listOfXTiles[1], listOfYTiles[1]
 end
 
 --- Generate a square room
@@ -263,6 +284,18 @@ function roomClass:generateCARoom(width, height)
     return room
 end
 
+function roomClass:setTile(x, y, type)
+    self.tiles[y][x]:setType(type)
+end
+
+function roomClass:getTile(x, y)
+    if self.tiles[y] and self.tiles[y][x] then
+        return self.tiles[y][x]
+    else
+        return false
+    end
+end
+
 --- Combines specified room with current room.
 -- If (ox, oy) is given, the room being added will
 -- be offset by that amount. Otherwise it's centered.
@@ -271,79 +304,49 @@ end
 -- @param oy y displacement from center
 -- @treturn object room
 function roomClass:combineWith(room, ox, oy)
+    local maxWidth = math.max(self:getRoomWidth(), room:getRoomWidth())
+    local maxHeight = math.max(self:getRoomHeight(), room:getRoomHeight())
 
-    -- Arbitrary 2D space for room combining
-    local bufferW = 50
-    local bufferH = 50
+    local x1, y1 = self:getPositionInWorld()
+    local x2, y2 = room:getPositionInWorld()
 
-    -- Create arbitrary space for rooms to be combined on
-    local newRoom = {}
-    for y = 1, bufferH do
-        newRoom[y] = {}
-        for x = 1, bufferW do
-            newRoom[y][x] = tileClass():createTile(self, x, y, 'empty')
+    local startX = math.min(x1, x2)
+    local startY = math.min(x2, y2)
+
+    local buffer = roomClass():generateSquareRoom(maxWidth - 2, maxHeight - 2)
+
+    for y = 1, #buffer.tiles do
+        for x = 1, #buffer.tiles[y] do
+            buffer.tiles[y][x]:setType('empty')
         end
     end
 
     local rooms = {self, room}
-
     for _, r in pairs(rooms) do
+        local cx = math.floor(maxWidth/2) - math.floor(r:getRoomWidth()/2)
+        local cy = math.floor(maxHeight/2) - math.floor(r:getRoomHeight()/2)
 
-        -- Place room into center of 2D space
-        local cx = math.floor(bufferW/2) - math.floor(r:getRoomWidth()/2)
-        local cy = math.floor(bufferH/2) - math.floor(r:getRoomHeight()/2)
+        for x = startX, maxWidth do
+            for y = startY, maxHeight do
+                local tile = r:getTile(x, y)
+                local target = buffer:getTile(x + cx, y + cy)
 
-        -- Offset second room negatively
-        if _ > 1 then
-            ox = -ox
-            oy = -oy
-        end
+                if tile and target then
+                    if tile:getType('floor') then
+                        target:setType(tile:getType())
+                    end
 
-        for y = 1, #r.tiles do
-            for x = 1, #r.tiles[y] do
-                local tile = r.tiles[y][x]
-                local nx = x + cx + ox
-                local ny = y + cy + oy
-
-
-                if tile:getType('floor') then
-                        newRoom[ny][nx]:setType(tile:getType())
-                end
-
-                if tile:getType('wall') then
-                    if newRoom[ny][nx]:getType('empty') then
-                        newRoom[ny][nx]:setType(tile:getType())
+                    if tile:getType('wall') then
+                        if target:getType('empty') then
+                            target:setType(tile:getType())
+                        end
                     end
                 end
             end
         end
     end
 
-    self.tiles = newRoom
-
-    local roomX, roomY = self:getPositionInWorld()
-    local roomW, roomH = self:getRoomWidth(true), self:getRoomHeight(true)
-
-    roomX = roomX - 1
-    roomY = roomY - 1
-    roomW = roomW
-    roomH = roomH
-
-    newRoom = {}
-    for y = 1, #self.tiles do
-        if y <= roomH + 2 then newRoom[y] = {} end
-        for x = 1, #self.tiles[y] do
-            if x <= roomW and y <= roomH then newRoom[y][x] = tileClass():createTile(self, x, y, 'empty') end
-
-            if not self.tiles[y][x]:getType('empty') then
-                local tile = self.tiles[y - roomY][x - roomX]
-                newRoom[y - roomY][x - roomX]:setType(self.tiles[y][x]:getType())
-            end
-        end
-    end
-
-    -- Transpose newly created room tiles onto existing room.
-    self.tiles = newRoom
+    self.tiles = buffer.tiles
 
     return self
 end
@@ -351,6 +354,20 @@ end
 --- Randomly adds doors a room.
 -- Based on cardinal direction of walls in room.
 function roomClass:addDoorsToRoom()
+
+    for y = 1, #self.tiles do
+        for x = 1, #self.tiles[y] do
+            local tile = self.dungeon.tiles[y][x]
+
+            if tile:getType('wall') then
+                if tile:hasProperty('isOverlappingWall') then
+                    local neighbors = tile.localNeighbors
+                    error('adddoorstoroom')
+                    print(#neighbors)
+                end
+            end
+        end
+    end
 end
 
 --- Fills in wall tiles around floor tiles.

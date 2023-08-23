@@ -9,8 +9,6 @@
 -- Class declaration.
 local Class = require 'libraries.hump.class'
 local roomClass = require 'scripts.class.roomClass'
-local tileClass = require 'scripts.class.tileClass'
-local CA = require 'scripts.class.cellular'
 local dungeonClass = Class{}
 
 local id = 0
@@ -22,9 +20,18 @@ function dungeonClass:init(width, height)
 
     self.width = width or 50
     self.height = height or 50
+    self.maxDensity = 0.1 -- % to fill. (max ~70-80%)
 
     -- Create map buffer of empty tiles.
     self.tiles = roomClass():createRoomBuffer(self.width, self.height, 'black')
+
+    self.tileCache = {}
+    for y = 1, self.height do
+        self.tileCache[y] = {}
+        for x = 1, self.width do
+            self.tileCache[y][x] = {}
+        end
+    end
 
     self.listOfRooms = {}
     self.listOfTiles = {} -- Maybe?
@@ -106,9 +113,40 @@ function dungeonClass:getRandomWall()
     return walls[math.random(1, #walls)]
 end
 
+--- Returns a ratio of floor tiles to wall tiles
+-- Used to determine how dense the dungeon is during
+-- dungeon generation.
+function dungeonClass:getDensity()
+    local fullCells = 0
+
+    for y = 1, #self.tiles do
+        for x = 1, #self.tiles[y] do
+            if not self.tiles[y][x]:getType('black') then
+                fullCells = fullCells + 1
+            end
+        end
+    end
+
+    return fullCells/(#self.tiles * #self.tiles[1])
+end
+
 
 function dungeonClass:getRandomRoom()
     return self.listOfRooms[math.random(1, #self.listOfRooms)]
+end
+
+function dungeonClass:getTile(wx, wy)
+    for _, room in pairs(self.listOfRooms) do
+        for y = 1, #room.tiles do
+            for x = 1, #room.tiles[y] do
+                local tx, ty  = room.tiles[y][x]:getWorldPosition()
+
+                if wx == tx and wy == ty then
+                    return room.tiles[y][x]
+                end
+            end
+        end
+    end
 end
 
 --- "Throw" the generated room at the dungeon
@@ -119,31 +157,31 @@ function dungeonClass:throwRoomAtDungeon(room)
     local roomWidth = room:getRoomWidth()
     local roomHeight = room:getRoomHeight()
 
-    local dungeonWidth = self.width
-    local dungeonHeight = self.height
-
-    local xBoundary = dungeonWidth - roomWidth - 1
-    local yBoundary = dungeonHeight - roomHeight - 1
-
     local targetRoom = self:getRandomRoom()
     local rx, ry = targetRoom:getPositionInWorld()
     local rw, rh = targetRoom:getRoomDimensions()
 
+
     -- Start scanning top left corner
-    local startX = rx - roomWidth
-    local startY = ry - roomHeight
+    local startX = rx - roomWidth - 5
+    local startY = ry - roomHeight - 5
 
-    local endX = rx + rw
-    local endY = ry + rh
+    local endX = rx + rw + 5
+    local endY = ry + rh + 5
 
-    -- print(targetRoom.id, startX, startY, endX, endY)
-    for y = startY, endY do
-        for x = startX, endX do
-            local ox = x - roomWidth - 1
-            local oy = y - roomHeight - 1
 
+    for x = startX, endX do
+        for y = startY, endY do
+
+            -- if x == 8 and y == 0 then 
+            --     if self:isValidRoomPlacement(room, x, y) then
+            --         self:addRoom(room, x, y)
+            --     end
+            --     return
+            -- end
+            
             if self:isValidRoomPlacement(room, x, y) then
-                self:copyRoomIntoDungeon(room, x, y)
+                self:addRoom(room, x, y)
                 return true
             end
         end
@@ -151,25 +189,6 @@ function dungeonClass:throwRoomAtDungeon(room)
 
 
     return false
-end
---- Returns a ratio of floor tiles to wall tiles
--- Used to determine how dense the dungeon is during
--- dungeon generation.
-function dungeonClass:getFullToEmptyRatio()
-    local fullCells = 0
-    local emptyCells = 0
-
-    for y = 1, #self.tiles do
-        for x = 1, #self.tiles[y] do
-            if self.tiles[y][x]:getType('black') then
-                emptyCells = emptyCells + 1
-            else
-                fullCells = fullCells + 1
-            end
-        end
-    end
-
-    return fullCells/emptyCells
 end
 
 --- Does supplied room fit into the dungeon at x,y.
@@ -188,25 +207,29 @@ function dungeonClass:isValidRoomPlacement(room, x, y)
 
     for ry = 1, #room.tiles do
         for rx = 1, #room.tiles[ry] do
-            -- Return false if tile does not exist
-            if not self.tiles[y + ry] then return false end
-            if not self.tiles[y + ry][x + rx] then return false end
 
-            local targetTile = self.tiles[y + ry][x + rx]
+            -- Return false if any single tile it outside map bounds
+            if (x + rx) <= 0 or (x + rx) >= self.width then return false end
+            if (y + ry) <= 0 or (y + ry) >= self.height then return false end
+
+            -- local targetTile = self.tiles[y + ry][x + rx]
+            local targetTile = self:getTile(x + rx, y + ry)
             local roomTile = room.tiles[ry][rx]
 
-            if roomTile:getType('wall') then
-                if targetTile:getType('wall') then
-                    roomTile:setProperty('isOverlappingWall', true)
-                    overlappingWallCount = overlappingWallCount + 1
+            -- If there is another room tile at location
+            if targetTile then
+                if roomTile:getType('wall') then
+                    if targetTile:getType('wall') then
+                        overlappingWallCount = overlappingWallCount + 1
+                    end
                 end
-            end
 
-            if roomTile:getType('floor') then
-                if targetTile:getType('floor') or targetTile:getType('wall') then
-                    overlappingFloorCount = overlappingFloorCount + 1
+                if roomTile:getType('floor') then
+                    if targetTile:getType('floor') or targetTile:getType('wall') then
+                        overlappingFloorCount = overlappingFloorCount + 1
+                    end
                 end
-            end
+            end -- If the tile is empty
         end
     end
 
@@ -217,11 +240,29 @@ function dungeonClass:isValidRoomPlacement(room, x, y)
     end
 end
 
+function dungeonClass:addRoom(room, x, y)
+    -- Set's all tiles world position to new position
+    room:setPosition(x, y)
+
+    table.insert(self.listOfRooms, room)
+
+    -- print('last: ' .. x .. ' ' .. y)
+
+    for i = 1, #room.tiles do
+        for j = 1, #room.tiles[i] do
+            if not room.tiles[i][j]:getType('empty') then
+                --FIXME: Remove after done debugging
+                -- if not self.tileCache[y + i] then return end
+                -- if not self.tileCache[y + i][x + j] then return end
+                self.tileCache[y + i][x + j] = room
+            end
+        end
+    end
+end
+
+
 
 --- Copy room tiles onto the map.
--- We virtually check locations for the room to fit.
--- Once we found a fitting location. We "copy" the room
--- onto that position on the map.
 -- @tparam table room
 -- @param x
 -- @param y
@@ -240,8 +281,10 @@ function dungeonClass:copyRoomIntoDungeon(room, x, y)
 
             -- Don't copy over empty 'buffer' tiles
             if not roomTile:getType('empty') then
-                targetTile:setPosition(x + rx, y + ry)
-                targetTile:setType(roomTile:getType())
+
+                -- targetTile:setPosition(x + rx, y + ry)
+                -- targetTile:setType(roomTile:getType())
+                -- targetTile:setDirty()
             end
 
 
@@ -250,7 +293,7 @@ function dungeonClass:copyRoomIntoDungeon(room, x, y)
             -- room tiles to match their new position.
             -- Which fucking sucks.
             roomTile:setPosition(x + rx, y + ry)
-            room.dungeon = self -- Tell room it's inside a dungeon
+            roomTile:setProperty('dungeon', self)
         end
     end
 
@@ -268,21 +311,36 @@ end
 -- @treturn table mapData A 2D array (table) full of tiles.
 local steps = 0
 function dungeonClass:buildDungeon()
+    self.listOfRooms = {}
     if #self.listOfRooms < 1 then
         local startingRoom = self:generateRandomRoom()
-        self:copyRoomIntoDungeon(startingRoom, 20, 20)
+        self:addRoom(startingRoom, 0, 0)
     end
+
+
 
     local function _step()
-        local room = self:generateRandomRoom()
-        self:throwRoomAtDungeon(room)
+        local density = self:getDensity()
+
+        if density < self.maxDensity then
+            local room = self:generateRandomRoom()
+            self:throwRoomAtDungeon(room)
+        end
     end
 
-    for i = 1, 20 do
+    for i = 1, 10 do
         _step()
     end
+    --
+    -- for _, room in pairs(self.listOfRooms) do
+    --     room:addDoorsToRoom()
+    -- end
 
-    local density = 8
+    -- for y = 1, #self.tiles do
+        -- for x = 1, #self.tiles[y] do
+            -- self.tiles[y][x]:setType('door')
+        -- end
+    -- end
 
     -- while (#self.listOfRooms <= math.min(density, 25)) do
     --     failsafe = failsafe + 1
