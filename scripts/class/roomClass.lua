@@ -11,14 +11,11 @@ local tileClass = require 'scripts.class.tileClass'
 local CA = require 'scripts.class.cellular'
 local roomClass = Class{}
 
-local id = 0
+
 function roomClass:init()
     self.tiles = {}
 
     self.dungeon = nil -- Reference to dungeon
-
-    id = id + 1
-    self.id = id
 
     self.x = 1
     self.y = 1
@@ -77,7 +74,7 @@ function roomClass:setPosition(x, y)
         for oldx = 1, #self.tiles[oldy] do
             local tile = self.tiles[oldy][oldx]
 
-            tile:setWorldPosition(x + oldx, y + oldy)
+            tile:setWorldPosition(x + tile.x, y + tile.y)
         end
     end
 
@@ -290,6 +287,9 @@ function roomClass:generateCARoom(width, height)
     return room
 end
 
+function roomClass:convertWorldToLocal()
+end
+
 function roomClass:setTile(x, y, type)
     self.tiles[y][x]:setType(type)
 end
@@ -326,6 +326,17 @@ function roomClass:getTile(x, y)
         return self.tiles[y][x]
     else
         return false
+    end
+end
+
+function roomClass:getTileByWorld(wx, wy)
+    -- convert world to local
+    local roomX, roomY = self:getPositionInWorld()
+    local x = wx - roomX
+    local y = wy - roomY
+
+    if self.tiles[y] and self.tiles[y][x] then
+        return self.tiles[y][x]
     end
 end
 
@@ -396,8 +407,32 @@ function roomClass:addDoorsToRoom()
                 if tile:hasProperty('isOverlappingWall') then
                     local neighbors = tile.localNeighbors
                     error('adddoorstoroom')
-                    print(#neighbors)
                 end
+            end
+        end
+    end
+end
+
+function roomClass:setNeighbors()
+    for y = 1, #self.tiles do
+        for x = 1, #self.tiles[y] do
+            local tile = self.tiles[y][x]
+            tile.neighbors = {}
+
+            if self.tiles[y-1] and self.tiles[y-1][x] then -- UP
+                table.insert(tile.neighbors, {tile = self.tiles[y-1][x], direction = 'north'})
+            end
+
+            if self.tiles[y+1] and self.tiles[y+1][x] then -- DOWN
+                table.insert(tile.neighbors, {tile = self.tiles[y+1][x], direction = 'south'})
+            end
+
+            if self.tiles[y] and self.tiles[y][x+1] then -- RIGHT
+                table.insert(tile.neighbors, {tile = self.tiles[y][x+1], direction = 'east'})
+            end
+
+            if self.tiles[y] and self.tiles[y][x-1] then
+                table.insert(tile.neighbors, {tile = self.tiles[y][x-1], direction = 'west'})
             end
         end
     end
@@ -408,14 +443,15 @@ end
 function roomClass:addWallsToRoom()
     local oldRoom = self.tiles
 
-    self:setDirty() -- Clean tiles before checking neighbors
+    self:setNeighbors()
+    -- self:setDirty() -- Clean tiles before checking neighbors
 
     for y = 1, #oldRoom do
         for x = 1, #oldRoom[y] do
             local tile = oldRoom[y][x]
 
             if tile and tile:getType('empty') then
-                for _, data in pairs(tile.localNeighbors) do
+                for _, data in pairs(tile.neighbors) do
                     local neighbor = data.tile
 
                     if neighbor:getType('floor') then

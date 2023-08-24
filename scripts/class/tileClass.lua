@@ -7,21 +7,30 @@
 
 -- Class declaration.
 local Class = require 'libraries.hump.class'
+local lume = require 'libraries.lume'
 local tileClass = Class{}
 
-local id = 0
+
+local function _createUUID()
+    local uuid = ''
+    local chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+    for i = 1, 30 do
+        local l = math.random(1, #chars)
+        uuid = uuid .. string.sub(chars, l, l)
+    end
+    return uuid
+end
 
 --- Initialize new tile instance
 function tileClass:init()
-    id = id + 1
-    self.id = id
+    self.id = _createUUID()
 
-    self.roomId = nil
-    self.room = nil
+    self.roomid = nil
+    -- self.room = nil
     self.dungeon = nil
 
-    self.localNeighbors = {} -- Neighbors inside room.
-    self.worldNeighbors = {} -- Neighbors in dungeon
+    -- self.localNeighbors = {} -- Neighbors inside room.
+    -- self.worldNeighbors = {} -- Neighbors in dungeon
 
     self.x = 0
     self.y = 0
@@ -71,108 +80,6 @@ function tileClass:getProperty(property)
     if self:hasProperty(property) then
         return self[property]
     end
-end
-
---- Set tile Object roomid
--- @param room
-function tileClass:setRoom(room)
-    if not room then return end
-
-    self.roomId = room.id
-    self.room = room
-    return self
-end
-
---- Called by tileObject clean function.
--- When a tile is marked dirty, call this function to
--- update tileObject.worldNeighbors table with updated
--- tiles. Since dirty tiles are new, or moved.
-function tileClass:updateLocalNeighbors()
-    self.localNeighbors = {}
-
-    for y = 1, #self.room.tiles do
-        for x = 1, #self.room.tiles[y] do
-            local room = self.room.tiles
-
-            if x == self.x and y == self.y then
-                if room[y-1] and room[y-1][x] then
-                    table.insert(self.localNeighbors, {tile = room[y-1][x], direction = 'north'})
-                end
-
-                if room[y+1] and room[y+1][x] then
-                    table.insert(self.localNeighbors, {tile = room[y+1][x], direction = 'south'})
-                end
-
-                if room[y] and room[y][x+1] then
-                    table.insert(self.localNeighbors, {tile = room[y][x+1], direction = 'east'})
-                end
-
-                if room[y] and room[y][x-1] then
-                    table.insert(self.localNeighbors, {tile = room[y][x-1], direction = 'west'})
-                end
-            end
-        end
-    end
-end
-
---- Called by tileObject clean function.
--- When a tile is marked dirty, call this function to
--- update tileObject.worldNeighbors table with updated
--- tiles. Since dirty tiles are new, or moved.
-function tileClass:updateWorldNeighbors()
-    self.worldNeighbors = {}
-
-    if not self.room then return end
-    if not self.room.dungeon then return end
-    if not self.room.dungeon.tiles then return end
-
-    local dungeon = self.room.dungeon.tiles
-
-
-    for y = 1, #self.room.tiles do
-        for x = 1, #self.room.tiles[y] do
-            if x == self.x and y == self.y then
-                if dungeon[y-1] and dungeon[y-1][x] then
-                    table.insert(self.worldNeighbors, {tile = dungeon[y-1][x], direction = 'north'})
-                end
-
-                if dungeon[y+1] and dungeon[y+1][x] then
-                    table.insert(self.worldNeighbors, {tile = dungeon[y+1][x], direction = 'south'})
-                end
-
-                if dungeon[y] and dungeon[y][x+1] then
-                    table.insert(self.worldNeighbors, {tile = dungeon[y][x+1], direction = 'east'})
-                end
-
-                if dungeon[y] and dungeon[y][x-1] then
-                    table.insert(self.worldNeighbors, {tile = dungeon[y][x-1], direction = 'west'})
-                end
-            end
-        end
-    end
-end
-
---- Super important accessor function.
--- Because of how lua uses references, and me being bad at coding
--- this is my work around. When tiles are copied into the dungeon,
--- they are marked 'dirty' and calls this function. This function
--- finds the corresponding tile in the dungeon class, and assigns
--- it the properties that match the roomTiles property.
-function tileClass:updateProperties()
-    -- if not self.dungeon then return false end
-    --
-    -- local tile = self.dungeon.tiles[self.y][self.x]
-    -- tile:setPosition(self:getPosition())
-    -- tile:setProperty('roomId', self.roomId)
-    -- tile:setProperty('room', self.room)
-    -- tile:setProperty('localNeighbors', self.localNeighbors)
-    -- tile:setProperty('worldNeighbors', self.worldNeighbors)
-    --
-    -- if not self:getType('empty') then tile:setType(self:getType()) end
-end
-
-function tileClass:updatePosition()
-
 end
 
 --- Returns table of neighbors based on type filter
@@ -226,8 +133,11 @@ end
 function tileClass:createTile(room, x, y, type)
     self:setType(type)
     self:setLocalPosition(x,y)
-    self:setWorldPosition(x,y)
-    self:setRoom(room)
+    -- self:setWorldPosition(x,y)
+
+    if room then
+        self.roomid = room.id
+    end
 
     return self
 end
@@ -243,10 +153,10 @@ end
 --- Clean dirty tiles by reassigning key valus
 -- @return self for chaining function calls
 function tileClass:clean()
-    self:updatePosition()
-    self:updateLocalNeighbors()
-    self:updateWorldNeighbors()
-    self:updateProperties()
+    -- self:updatePosition()
+    -- self:updateLocalNeighbors()
+    -- self:updateWorldNeighbors()
+    -- self:updateProperties()
     return self
 end
 
@@ -277,7 +187,7 @@ function tileClass:serialize()
     local t = {}
     
     for key, data in pairs(self) do
-        if key ~= 'localNeighbors' and key ~= 'worldNeighbors' and key ~= 'room' then
+        if key ~= 'neighbors' then
             t[key] = data
         end
     end
