@@ -9,6 +9,8 @@ local Gamestate = require 'libraries/hump.gamestate'
 local State = require 'scripts/gamestate'
 local game = {}
 
+love.graphics.setDefaultFilter('linear', 'linear')
+
 function love.load()
 
   for i = 1, 100 do
