@@ -68,7 +68,6 @@ function CA:doStep(oldHyperSpace, args)
     return newHyperSpace
 end
 
--- TODO: pick up here
 function CA:generateCAMap(width, height, ...)
     local args = {...} -- Default parameters for decent map
     args.birthLimit = args.birthLimit or 4
@@ -124,19 +123,19 @@ function CA:floodFill(map, start, list)
     local x = start.x
     local y = start.y
 
-    if map[y-1] and map[y-1][x] and map[y-1][x]:getType('floor') and not map[y-1][x]._filled then
+    if map[y-1] and map[y-1][x] and not map[y-1][x]:getType('wall') and not map[y-1][x]._filled then
         self:floodFill(map, map[y-1][x], list)
     end
 
-    if map[y+1] and map[y+1][x] and map[y+1][x]:getType('floor') and not map[y+1][x]._filled then
+    if map[y+1] and map[y+1][x] and not map[y+1][x]:getType('wall') and not map[y+1][x]._filled then
         self:floodFill(map, map[y+1][x], list)
     end
 
-    if map[y] and map[y][x+1] and map[y][x+1]:getType('floor') and not map[y][x+1]._filled then
+    if map[y] and map[y][x+1] and not map[y][x+1]:getType('wall') and not map[y][x+1]._filled then
         self:floodFill(map, map[y][x+1], list)
     end
 
-    if map[y] and map[y][x-1] and map[y][x-1]:getType('floor') and not map[y][x-1]._filled then
+    if map[y] and map[y][x-1] and not map[y][x-1]:getType('wall') and not map[y][x-1]._filled then
         self:floodFill(map, map[y][x-1], list)
     end
 

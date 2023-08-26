@@ -1,18 +1,26 @@
---- Room Class.
--- Used in Procedural generation. Contains methods using
--- the Builder design pattern to stitch together rooms
--- that are procedurally generated.
--- @module roomClass.lua
--- @author Lonely Owl Games
+---- Implements Room Objects for room accretion. Room objects are
+-- containers of tile data, with special behavior for generation.
+--
+-- @classmod Room
+-- @author LonelyOwl
+-- @usage Room() 
+-- @copyright Creative Commons Attribution 4.0 International License
 
--- Class declaration.
+--- List of data structures contained within.
+--
+-- @field x (int) x world position of room. (top left corner)
+-- @field y (int) y world position of room. (top left corner)
+-- @field dungeon (int) id of dungeon the room belongs to.
+-- @field connectedRooms (table) a list of connected rooms indexed by id.
+-- @field tiles (table) List of tile objects in room.
+-- @field tileCache (table) 2D array of tile ids indexed by local x, y position.
+
 local Class = require 'libraries.hump.class'
 local tileClass = require 'scripts.class.tileClass'
 local CA = require 'scripts.class.cellular'
-local roomClass = Class{}
+local Room = Class{}
 
-
-function roomClass:init()
+function Room:init()
     self.tiles = {}
 
     self.dungeon = nil -- Reference to dungeon
@@ -20,29 +28,23 @@ function roomClass:init()
     self.x = 1
     self.y = 1
 
+    self.tileCache = {}
+
     self.connectedRooms = {}
 end
 
--- Rooms are comprised of a 2D table called .tiles.
--- sorted by [y] then [x] value. Each value in an 
--- index is a reference to a 'tile' object.
-
---- Helper function for room buffers.
--- Room buffers are a 2D array of empty tiles
--- the room is built on. This is required for
--- neighboring tiles to be calculated.
--- @param width
--- @param height
--- @param type (optional) for edge case behavior
--- @treturn table buffer A 2D array of tile objects
-function roomClass:createRoomBuffer(width, height, type)
+--- Creates a room buffer (hash map) for tile manipulation.
+-- @lfunction Room:_createRoomBuffer
+function Room:_createRoomBuffer(width, height, type)
     local buffer = {}
     type = type or 'empty'
 
     for y = 1, height do
         buffer[y] = {}
+        self.tileCache[y] = {}
         for x = 1, width do
             local tile = tileClass():createTile(self, x, y, type)
+            self.tileCache[y][x] = {}
             buffer[y][x] = tile
         end
     end
@@ -50,30 +52,19 @@ function roomClass:createRoomBuffer(width, height, type)
     return buffer
 end
 
---- Set all tiles in room to dirty.
--- This is needed, because if we set tiles to dirty
--- while they're being created / moved. Then the subsequent
--- calls to neighboring tiles, etc will not have proper
--- references to other tiles.
--- @treturn object room for chaining functions
-function roomClass:setDirty()
-    for y = 1, #self.tiles do
-        for x = 1, #self.tiles[y] do
-            self.tiles[y][x]:setDirty()
-        end
-    end
-
-    return self
-end
-
-function roomClass:setPosition(x, y)
+--- Set world position of room, and update tile (wx, wy) positions.
+function Room:setPosition(x, y)
     self.x = x
     self.y = y
 
     for oldy = 1, #self.tiles do
+        self.tileCache[oldy + y] = {}
         for oldx = 1, #self.tiles[oldy] do
+            self.tileCache[oldy + y][oldx + x] = {}
+
             local tile = self.tiles[oldy][oldx]
 
+            self.tileCache[y + tile.y][x + tile.x] = tile
             tile:setWorldPosition(x + tile.x, y + tile.y)
         end
     end
@@ -81,17 +72,16 @@ function roomClass:setPosition(x, y)
     return self
 end
 
-function roomClass:addConnectedRoom(id)
-    self.connectedRooms[#self.connectedRooms+1] = id
+--- A function for pushing ids to Room.connectedRooms
+-- @lfunction Room:connectTo
+function Room:connectTo(id)
+    -- self.connectedRooms[#self.connectedRooms] = id
+    table.insert(self.connectedRooms, id)
 end
 
---- Returns room width in tiles.
--- by iterating over ever [y] value and then
--- pushing the largest x value to the top of a 
--- stack to pop out. Then calculations based on world pos
--- @tparam boolean excludeEmpties whether count empty tiles
--- @treturn int width
-function roomClass:getRoomWidth(excludeEmpties)
+--- Return room width by largest x-value of contained tiles.
+-- @tparam boolean excludeEmpties whether to include empty tiles in calculation.
+function Room:getRoomWidth(excludeEmpties)
     local counts = {}
     local width
 
@@ -115,24 +105,14 @@ function roomClass:getRoomWidth(excludeEmpties)
     width = counts[1]
 
     -- See where the room is in the world
-    local roomXPos, _ = self:getPositionInWorld()
+    local roomXPos, _ = self:getPosition()
 
-    -- Subtract world position by largest x value to get width
-    -- if self.dungeon then
-    --     return width
-    -- else
-    --     return width - roomXPos + 1
-    -- end
     return width - roomXPos + 1
 end
 
---- Returns room height in tiles
--- if empties are excluded, we need to loop through entire
--- 2D array to find non-empty tiles. Then sort over their 
--- y-values to determine the largest value relative to world pos.
--- @tparam boolean excludeEmpties from search
--- @treturn int height
-function roomClass:getRoomHeight(excludeEmpties)
+--- Return room height by largest h-value of contained tiles.
+-- @tparam boolean excludeEmpties whether to include empty tiles in calculation.
+function Room:getRoomHeight(excludeEmpties)
     local height
 
     if excludeEmpties then
@@ -154,60 +134,37 @@ function roomClass:getRoomHeight(excludeEmpties)
     end
 
     -- See where the room is in the world
-    local _, roomYPos = self:getPositionInWorld()
+    local _, roomYPos = self:getPosition()
 
-    -- Subtract world Y position by room Y position for height
-    -- if self.dungeon then
-    --     return height
-    -- else
-    --     return height - roomYPos + 1
-    -- end
     return height - roomYPos + 1
 end
 
-function roomClass:getRoomDimensions(excludeEmpties)
+--- A function for getting width & height.
+-- @see getRoomWidth
+-- @see getRoomHeight
+-- @tparam boolean excludeEmpties whether empty tiles should be counted.
+function Room:getRoomDimensions(excludeEmpties)
     return self:getRoomWidth(excludeEmpties), self:getRoomHeight(excludeEmpties)
 end
 
---- Returns position in world.
--- Returns a new list of tiles that have
--- offsets applied to their respective x & y values.
--- @return (x,y) x & y position in world.
-function roomClass:getPositionInWorld()
+--- A function for getting the (x, y) position of a room. 
+-- @see setPosition
+function Room:getPosition()
     return self.x, self.y
-    -- local listOfXTiles = {}
-    -- local listOfYTiles = {}
-    --
-    -- for y = 1, #self.tiles do
-    --     for x = 1, #self.tiles[y] do
-    --         local tile = self.tiles[y][x]
-    --
-    --         if not tile:getType('empty') then
-    --             table.insert(listOfXTiles, tile.wx)
-    --             table.insert(listOfYTiles, tile.wy)
-    --         end
-    --     end
-    -- end
-    --
-    -- table.sort(listOfXTiles, function(a,b) return a < b end)
-    -- table.sort(listOfYTiles, function(a,b) return a < b end)
-    --
-    -- return listOfXTiles[1], listOfYTiles[1]
 end
 
 --- Generate a square room
--- @param width
--- @param height
--- @treturn object room for chaining functions
-function roomClass:generateSquareRoom(width, height)
-    self.tiles = self:createRoomBuffer(width + 2, height + 2) -- Reset interal buffer
+function Room:generateSquareRoom(width, height)
+    self.tiles = self:_createRoomBuffer(width + 2, height + 2) -- Reset interal buffer
 
     -- Build a 1 tile border for walls.
     for y = 2, #self.tiles - 1 do
+        self.tileCache[y] = {}
         for x = 2, #self.tiles[y] - 1 do
             local tile = tileClass():createTile(self, x, y, 'floor')
 
             self.tiles[y][x] = tile
+            self.tileCache[x] = {}
         end
     end
 
@@ -216,10 +173,8 @@ function roomClass:generateSquareRoom(width, height)
     return self
 end
 
---- Generate a circular room
--- @param radius
--- @treturn object room for chaining functions
-function roomClass:generateCircleRoom(radius)
+--- Generate a circular room given a radius.
+function Room:generateCircleRoom(radius)
     if radius % 2 == 0 then -- Needs to be a division of 2 for good circles
         radius = radius / 2
     else
@@ -229,18 +184,20 @@ function roomClass:generateCircleRoom(radius)
     local width = radius * 2 + 3
     local height = radius * 2 + 3
 
-    self.tiles = self:createRoomBuffer(width, height)
+    self.tiles = self:_createRoomBuffer(width, height)
 
     local centerX = math.floor(radius) + 2
     local centerY = math.floor(radius) + 2
 
     for y = 1, #self.tiles - 1 do
+        self.tileCache[y] = {}
         for x = 1, #self.tiles[y] - 1 do
             local distance = (x - centerX)^2 + (y - centerY)^2 - radius^2
             local max = math.sqrt(radius)
             local tile = tileClass():createTile(self, x, y, 'floor')
 
             if distance < max then
+                self.tileCache[y][x] = tile.id
                 self.tiles[y][x] = tile
             end
         end
@@ -251,7 +208,8 @@ function roomClass:generateCircleRoom(radius)
     return self
 end
 
-function roomClass:generateCARoom(width, height)
+--- Generate a Cellular Automata blob
+function Room:generateCARoom(width, height)
     local birthLimit = 4
     local deathLimit = 4
     local startAliveChance = 50
@@ -280,28 +238,25 @@ function roomClass:generateCARoom(width, height)
     -- Flood fill that tile, return table of filled tiles
     local fill = CAMap:floodFill(map, pickRandomTile)
 
-    local room = roomClass():createRoomFromTable(width, height, fill)
+    local room = Room():createRoomFromTable(width, height, fill)
 
     room:addWallsToRoom()
 
     return room
 end
 
-function roomClass:convertWorldToLocal()
-end
-
-function roomClass:setTile(x, y, type)
+--- Set the type of a tile at local x, y position
+function Room:setTile(x, y, type)
     self.tiles[y][x]:setType(type)
 end
 
--- Needs to return 2D array of self.tiles
-function roomClass:getSerializedRoomTiles()
+--- Iterates over all tiles inside room, and serializes those tiles for output. 
+function Room:getSerializedRoomTiles()
     local serializeTileData = {}
 
    for y = 1, #self.tiles do
         for x = 1, #self.tiles[y] do
             local sid = self.tiles[y][x]:serialize()
-
 
             serializeTileData[sid] = self.tiles[y][x].serializeData
         end
@@ -310,18 +265,8 @@ function roomClass:getSerializedRoomTiles()
     return serializeTileData
 end
 
-
--- dungeon ->
---  roomid -> data{
---                 tileId -> data
---                 tileId -> data
---                 tileId -> data
---  roomid -> data{
---                 tileId -> data
---                 tileId -> data
---                 tileId -> data
-
-function roomClass:getTile(x, y)
+--- Returns a tile Object based on local (x, y) position. 
+function Room:getTile(x, y)
     if self.tiles[y] and self.tiles[y][x] then
         return self.tiles[y][x]
     else
@@ -329,9 +274,10 @@ function roomClass:getTile(x, y)
     end
 end
 
-function roomClass:getTileByWorld(wx, wy)
+--- Returns a tile Object based on world (x, y) position
+function Room:getTileByWorld(wx, wy)
     -- convert world to local
-    local roomX, roomY = self:getPositionInWorld()
+    local roomX, roomY = self:getPosition()
     local x = wx - roomX
     local y = wy - roomY
 
@@ -340,24 +286,21 @@ function roomClass:getTileByWorld(wx, wy)
     end
 end
 
+-- TODO: Reimplement offset parameters.
 --- Combines specified room with current room.
 -- If (ox, oy) is given, the room being added will
 -- be offset by that amount. Otherwise it's centered.
--- @tparam object room to combine with
--- @param ox x displacement from center
--- @param oy y displacement from center
--- @treturn object room
-function roomClass:combineWith(room, ox, oy)
+function Room:combineWith(room, ox, oy)
     local maxWidth = math.max(self:getRoomWidth(), room:getRoomWidth())
     local maxHeight = math.max(self:getRoomHeight(), room:getRoomHeight())
 
-    local x1, y1 = self:getPositionInWorld()
-    local x2, y2 = room:getPositionInWorld()
+    local x1, y1 = self:getPosition()
+    local x2, y2 = room:getPosition()
 
     local startX = math.min(x1, x2)
     local startY = math.min(x2, y2)
 
-    local buffer = roomClass():generateSquareRoom(maxWidth - 2, maxHeight - 2)
+    local buffer = Room():generateSquareRoom(maxWidth - 2, maxHeight - 2)
 
     for y = 1, #buffer.tiles do
         for x = 1, #buffer.tiles[y] do
@@ -395,25 +338,8 @@ function roomClass:combineWith(room, ox, oy)
     return self
 end
 
---- Randomly adds doors a room.
--- Based on cardinal direction of walls in room.
-function roomClass:addDoorsToRoom()
-
-    for y = 1, #self.tiles do
-        for x = 1, #self.tiles[y] do
-            local tile = self.dungeon.tiles[y][x]
-
-            if tile:getType('wall') then
-                if tile:hasProperty('isOverlappingWall') then
-                    local neighbors = tile.localNeighbors
-                    error('adddoorstoroom')
-                end
-            end
-        end
-    end
-end
-
-function roomClass:setNeighbors()
+--- Populate tile neighbors on tile Object for later reference.
+function Room:setNeighbors()
     for y = 1, #self.tiles do
         for x = 1, #self.tiles[y] do
             local tile = self.tiles[y][x]
@@ -438,9 +364,9 @@ function roomClass:setNeighbors()
     end
 end
 
---- Fills in wall tiles around floor tiles.
--- Set 'empty' tiles with 'floor' neighbors as walls.
-function roomClass:addWallsToRoom()
+--- Iterates over every tile in a room, and assigns empty cells
+-- to wall cells if they're neighbored by floor cells.
+function Room:addWallsToRoom()
     local oldRoom = self.tiles
 
     self:setNeighbors()
@@ -464,18 +390,28 @@ function roomClass:addWallsToRoom()
     end
 end
 
---- Creates a room object from a list of tiles
+--- Used after a room is generated. Set the roomid property of all
+-- tiles in the room to the corresponding room.
+function Room:assignRoomIds(id)
+    for y = 1, #self.tiles do
+        for x = 1, #self.tiles do
+            if self.tiles[y][x] then
+                self.tiles[y][x].roomid = id
+            end
+        end
+    end
+end
+
+--- Creates a room object from a list of tiles.
 -- Needed because some generation algorithms
 -- like CA will output its result into a single
 -- dimension table instead of a 2D array of tiles.
--- @param width
--- @param height
--- @param table to convert into 2D array
-function roomClass:createRoomFromTable(width, height, table)
-    self.tiles = self:createRoomBuffer(width, height, 'empty')
+function Room:createRoomFromTable(width, height, table)
+    self.tiles = self:_createRoomBuffer(width, height, 'empty')
 
     for _, tile in pairs(table) do
         if self.tiles[tile.y] and self.tiles[tile.y][tile.x] then
+            self.tileCache[tile.y][tile.x] = tile.id
             self.tiles[tile.y][tile.x]:setType(tile:getType())
         end
     end
@@ -483,19 +419,9 @@ function roomClass:createRoomFromTable(width, height, table)
     return self
 end
 
--- dungeon ->
---  roomid -> data{
---                 tileId -> data
---                 tileId -> data
---                 tileId -> data
---  roomid -> data{
---                 tileId -> data
---                 tileId -> data
---                 tileId -> data
-
-
--- Tiles in Room are Serialized by {key = {tileData}}
-function roomClass:serialize()
+--- Serialization of room, and tiles consequentially.
+-- Serialization data: {key = id, value = {serializedTileData}}
+function Room:serialize()
     local serializeTileData = self:getSerializedRoomTiles()
 
     self.serializeData = {}
@@ -503,10 +429,10 @@ function roomClass:serialize()
     self.serializeData.x = self.x
     self.serializeData.y = self.y
     self.serializeData.id = self.id
-    self.serializeData.dungeon = self.dungeon
+    -- self.serializeData.dungeon = self.dungeon
 
     return self.serializeData
 end
 
 
-return roomClass
+return Room

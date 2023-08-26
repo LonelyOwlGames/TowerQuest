@@ -2,6 +2,7 @@ local sti = require 'libraries/sti'
 local bitser = require 'libraries.bitser'
 local ProcGen = require 'scripts.procedural'
 local Dungeon = require 'scripts.class.dungeonClass'
+local threadCode = require 'scripts.thread'
 
 local map = {}
 
@@ -11,39 +12,6 @@ local map = {}
 -------------------------------------------------------------------
 require('love.math')
 
-local threadCode = [[
-    require('love')
-    local Dungeon = require 'scripts.class.dungeonClass'
-    require('love.timer')
-
-    local preview = true
-    local width, height = ...
-
-    local newDungeon = Dungeon(width/22, height/22)
-    while newDungeon:getDensity() < newDungeon.maxDensity do
-        newDungeon:buildDungeon(preview) 
-        love.thread.getChannel('load'):push({newDungeon:getDensity(), newDungeon.maxDensity, newDungeon.numberOfRooms})
-
-        local serialized = newDungeon:serialize(newDungeon)
-        love.thread.getChannel('info'):push({serialized, 'dungeon', (newDungeon.numberOfRooms/newDungeon.maxDensity)})
-    end
-
-    count = 0
-    while (count < newDungeon.maxDensity) do
-        count = count + 1
-        local changes = newDungeon:doorTest(count)
-        love.thread.getChannel('load'):push({count, newDungeon.maxDensity})
-        
-        local serialized = newDungeon:serialize(newDungeon)
-        love.thread.getChannel('info'):push({serialized, 'doors', changes})
-    end
-
-   
-    local serialized = newDungeon:serialize(newDungeon)
-
-    love.thread.getChannel('info'):push({serialized, 'done'})
-
-]]
 
 local thread
 local timer = 0
@@ -52,156 +20,94 @@ function map:init()
     self.tileSize = 64
     self.tileset = love.graphics.newImage('tilemap/Tileset.png')
 
-    local tile = love.graphics.newQuad(0 * self.tileSize, 0 * self.tileSize, self.tileSize, self.tileSize, self.tileset:getWidth(), self.tileset:getHeight())
-
-    self.spriteBatch = love.graphics.newSpriteBatch(self.tileset, 25 * 23)
-    self.spriteBatchLayer = love.graphics.newSpriteBatch(self.tileset, 25 * 23)
-
-    self.thread = love.thread.newThread(threadCode)
-    self.thread:start(love.graphics.getWidth(), love.graphics.getHeight())
-
+    self.spriteBatch = love.graphics.newSpriteBatch(self.tileset, 25 * 24)
     self.spriteBatchBackground = love.graphics.newSpriteBatch(self.tileset, 25 * 23)
 
-    for y = 1, 300 do
-        for x = 1, 300 do
+    self.thread = love.thread.newThread(threadCode)
+    self.thread:start()
+
+    self.changes = {}
+    self.previousChanges = {}
+
+    -- Initialize background tilemap
+    for y = -150, 300 do
+        for x = -150, 300 do
             local quad = self:_createTile({type = 'wall'})
-            
+
             self.spriteBatchBackground:add(quad, x*64, y*64)
         end
     end
-            
 end
 
 -- Passing cinema right now, need to decouple later
 function map:update(dt, cinema)
     timer = timer + dt
+
     local info = love.thread.getChannel('info'):pop()
 
+    -- Executed when a change is popped from the stack.
+    if info and info[2] then
+        if info then
+            local data = bitser.loads(info[2])
 
-    if info and info[2] == 'dungeon' then
-        local scale = math.max(0.3, math.min(0.5/(info[3]*2), 1.5))
-        -- cinema:setCameraProperty('debug', 'scale', scale)
-        cinema:smoothScale('debug', scale)
-        self.changes = {}
-        self.oldMapData = self.mapData
-        self.mapData = info[1]
-        self.stage = 'dungeon'
-        self:load(cinema)
-        self.changes = {}
-    end
+            for _, change in pairs(data) do
+                table.insert(self.changes, {type = info[1], data = change})
+            end
 
-    if info and info[2] == 'doors' then
-        self.stage = 'doors'
-        for key, value in pairs(info[3]) do
-            self.changes[key] = value
+            self:load()
         end
-        self.oldMapData = self.mapData
-        self.mapData = info[1]
-        self:load()
-        cinema:panToPosition('debug', {25*64,15*64})
+
+        cinema:setArg('UI', 'state', 'Generating..')
+        cinema:setCameraProperty('debug', 'scale', 0.1)
     end
 
-    if info and info[2] == 'done' then
-        self.changes = {}
-        self:load()
+    if info and info[1] == 'done' then
+        -- error('done')
+    end
+
+    -- Iterate over list of previous changes, and change tile color one at a time.
+    if #self.previousChanges > 0 then
+        for i = 1, #self.previousChanges / 10 + 2 do
+            local change = self.previousChanges[i]
+            table.remove(self.previousChanges, i)
+
+            if change then 
+                self.spriteBatch:setColor(1,1,1,1)
+                self.spriteBatch:set(change.id, change.quad, change.tile.wx*64, change.tile.wy*64)
+            end
+        end
     end
 end
 
-function map:load(cinema)
+function map:load()
+    if #self.changes > 0 then
+        local changes = self.changes[1]
+        table.remove(self.changes, 1)
 
-    if self.mapData and self.oldMapData then
-        if self.stage == 'dungeon' then
-            local oldTiles = {}
-            local newTiles = {}
-
-            local data = bitser.loads(self.mapData)
-
-            for _, room in pairs(data) do
-                for _, tile in pairs(room.tiles) do
-                    table.insert(newTiles, tile)
-                end
-            end
-
-            local data = bitser.loads(self.oldMapData)
-
-            for _, room in pairs(data) do
-                for _, tile in pairs(room.tiles) do
-                    table.insert(oldTiles, tile)
-                end
-            end
-
-            table.sort(oldTiles, function(a,b) return a.id < b.id end)
-            table.sort(newTiles, function(a,b) return a.id < b.id end)
-
-            -- Treat each table as a stack.
-            -- Pop top element and compare.
-            -- If the top element does not match, sent
-            -- new tiles pop to changed stack
-            -- then pop another tile from new tiles
-            -- once they both match, discard both
-            -- and pop more
-            local function findChanges(oldTile)
-                if #oldTiles <= 0 then return end
-
-                local newTile
-                if not oldTile then
-                    oldTile = oldTiles[1]
-                    newTile = newTiles[1]
-
-                    table.remove(oldTiles, 1)
-                    table.remove(newTiles, 1)
-                else
-                    newTile = newTiles[1]
-                    table.remove(newTiles,1)
-                end
-
-                if oldTile.id == newTile.id then
-                    findChanges() -- no changes
-                end
-
-                if oldTile.id ~= newTile.id then
-                    -- table.insert(changes, newTile)
-                    self.changes[newTile.id] = true
-                    findChanges(oldTile)
-                end
-            end
-
-            if self.stage == 'dungeon' then
-                findChanges()
-            end
-        end
-    end
-
-    if self.mapData then
-        self.spriteBatch:clear()
-        local data = bitser.loads(self.mapData)
-
-        for roomid, room in pairs(data) do
-            for _, tile in pairs(room.tiles) do
+        if changes.type == 'room' then
+            for _, tile in pairs(changes.data.tiles) do
                 local quad = self:_createTile(tile)
                 local tx, ty = tile.wx, tile.wy
 
-                -- Jesus christ I'm a fucking wizard
-                if tile.type ~= 'empty' then --and tile.type ~= 'door' then
-                    if self.changes[tile.id] then
-                        -- cinema:setCameraProperty('debug', 'x', tile.x*64) 
-                        if cinema and self.stage == 'dungeon' then
-                            cinema:panToPosition('debug', {tile.wx*64, tile.wy*64})
-                        end
-
-                        
-                        if self.stage == 'dungeon' then
-                        self.spriteBatch:setColor(0.2,0.8,0.2,0.8)
-                        elseif self.stage == 'doors' then
-                        self.spriteBatch:setColor(1,0.3,0.1,1)
-                        end
-                    else
-                        self.spriteBatch:setColor(1,1,1,1)
-                    end
+                if tile.type ~= 'empty' then
+                    self.spriteBatch:setColor(0,0,0,0.3)
 
                     local id = self.spriteBatch:add(quad, tx*64, ty*64)
+                    table.insert(self.previousChanges, {id = id, quad = quad, tile = tile})
                 end
             end
+        end
+
+        if changes.type == 'tile' then
+            local quad = self:_createTile(changes.data)
+            local tx, ty = changes.data.wx, changes.data.wy
+
+            -- if changes.data.type ~= 'empty' then
+                self.spriteBatch:setColor(1,0,0,1)
+
+                local id = self.spriteBatch:add(quad, tx*64, ty*64)
+                table.insert(self.previousChanges, {id = id, quad = quad, tile = changes.data})
+            -- end
         end
     end
 end
@@ -234,20 +140,14 @@ vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords)
 }]]
 local shader = love.graphics.newShader(shaderCode)
 
-local progress = 0
-local roomsLoaded = 0
 function map:draw()
 
     love.graphics.clear()
-    -- Draw map outline
-    -- love.graphics.rectangle('line', -200, -400, 64*50, 64*50)
-
     love.graphics.setShader(shader)
     love.graphics.setColor(1,1,1,0.5)
     love.graphics.draw(self.spriteBatchBackground, -1280, -1280)
     love.graphics.setColor(1,1,1,1)
     love.graphics.draw(self.spriteBatch)
-    love.graphics.draw(self.spriteBatchLayer)
     love.graphics.setShader()
 
 end
@@ -259,6 +159,7 @@ local GID = {
     ['door'] = 8,
     ['room'] = 22,
     ['black'] = 112,
+    ['fill'] = 325,
 }
 
 function map:_createTile(tile)

@@ -112,7 +112,6 @@ function Cinema:update(dt)
                         else
                             camera.scale = camera.scale - 0.001
                         end
-                        print(factor, camera.scale)
                     end
                 end
             end
@@ -128,21 +127,17 @@ function Cinema:draw(cameraName)
     if camera.active then
         camera:attach()
             love.graphics.setColor(1,1,1,1)
-            if camera.args and camera.args.shader then
-                -- love.graphics.setShader(camera.args.shader)
-            end
             camera.drawCallback(camera.args)
-            love.graphics.setShader()
         camera:detach()
     end
 end
 
 function Cinema:debugPreset(cameraName)
     local camera = self.listOfCameras[cameraName]
-    camera.scale = 0.5
+    camera.scale = 1.5
     camera.x = camera.x + love.graphics.getWidth()
     camera.y = camera.y + love.graphics.getHeight()
-    camera:setFollowLerp(0.11)
+    camera:setFollowLerp(0.01)
     camera:setFollowStyle('TOPDOWN')
 end
 
