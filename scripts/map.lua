@@ -39,6 +39,28 @@ function map:init()
     end
 end
 
+local function _HSV(h, s, v)
+    if s <= 0 then return v,v,v end
+    h = h*6
+    local c = v*s
+    local x = (1-math.abs((h%2)-1))*c
+    local m,r,g,b = (v-c), 0, 0, 0
+    if h < 1 then
+        r, g, b = c, x, 0
+    elseif h < 2 then
+        r, g, b = x, c, 0
+    elseif h < 3 then
+        r, g, b = 0, c, x
+    elseif h < 4 then
+        r, g, b = 0, x, c
+    elseif h < 5 then
+        r, g, b = x, 0, c
+    else
+        r, g, b = c, 0, x
+    end
+    return r+m, g+m, b+m, 0.5
+end
+
 -- Passing cinema right now, need to decouple later
 function map:update(dt, cinema)
     timer = timer + dt
@@ -57,13 +79,13 @@ function map:update(dt, cinema)
             self:load()
         end
 
-        cinema:setArg('UI', 'state', 'Generating..')
-        cinema:setCameraProperty('debug', 'scale', 0.1)
+        -- cinema:setArg('UI', 'state', 'Generating..')
+        -- cinema:setCameraProperty('debug', 'scale', 0.2)
     end
 
-    if info and info[1] == 'done' then
-        -- error('done')
-    end
+    -- TODO: Special color and opacity behavior for tile change visualization should be handled
+    -- in the change table, either when the change is registered on the main thread or when
+    -- the change is serialized in the dungoen generation class, not here. Move this.
 
     -- Iterate over list of previous changes, and change tile color one at a time.
     if #self.previousChanges > 0 then
@@ -73,6 +95,11 @@ function map:update(dt, cinema)
 
             if change then 
                 self.spriteBatch:setColor(1,1,1,1)
+                if change.tile.distance then
+                    local distance = change.tile.distance
+                    local r,g,b,a = _HSV((distance/2)/255, 1, 1)
+                    self.spriteBatch:setColor(r,g,b,a)
+                end
                 self.spriteBatch:set(change.id, change.quad, change.tile.wx*64, change.tile.wy*64)
             end
         end
@@ -153,13 +180,13 @@ function map:draw()
 end
 
 local GID = {
-    ['floor'] = 25,
+    ['floor'] = 25, -- 25
     ['wall'] = 4,
     ['empty'] = 40,
     ['door'] = 8,
     ['room'] = 22,
     ['black'] = 112,
-    ['fill'] = 325,
+    ['fill'] = 326,
 }
 
 function map:_createTile(tile)

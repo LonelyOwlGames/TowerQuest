@@ -38,9 +38,15 @@ function Cinema:setCameraProperty(cameraName, property, value)
     camera[property] = value
 end
 
-function Cinema:panToPosition(cameraName, x, y)
+function Cinema:setPosition(cameraName, x, y)
     local camera = self.listOfCameras[cameraName]
-    self:setArg(cameraName, 'panTarget', {x,y})
+    camera.x = x
+    camera.y = y
+end
+
+function Cinema:panToPosition(cameraName, wx, wy, speed)
+    -- local camera = self.listOfCameras[cameraName]
+    self:setArg(cameraName, 'panTarget', {x = wx*64,y = wy*64, speed = speed})
 end
 
 function Cinema:setCameraFollow(cameraName, x, y)
@@ -75,13 +81,13 @@ function Cinema:setArg(cameraName, argName, value)
     camera.args[argName] = value
 end
 
-function Cinema:smoothScale(cameraName, scale)
+function Cinema:smoothScale(cameraName, scale, factor)
     local camera = self.listOfCameras[cameraName]
     local oldScale = camera.scale
     local newScale = scale
 
     if not camera.args then camera.args = {} end
-    camera.args.smoothScale = {oldScale, newScale}
+    camera.args.smoothScale = {oldScale, newScale, factor}
 end
 
 function Cinema:setCameraShader(cameraName, shader)
@@ -98,19 +104,48 @@ function Cinema:update(dt)
 
             if camera.args then 
                 if camera.args.panTarget then
-                    camera:follow(camera.args.panTarget[1][1], camera.args.panTarget[1][2])
+                    camera:follow(camera.args.panTarget.x, camera.args.panTarget.y)
+
+                    local speed = camera.args.panTarget.speed
+                    local mod = 1000
+                    local value = speed / mod
+
+                    camera:setFollowLerp(value)
+
+                    if camera.args.smoothScale then
+                        camera:setFollowLerp(value / (camera.scale/4))
+                    end
+
+                    -- Fixes the fence issue with x and y values not being on even numbers.
+                    local first, second
+                    if (camera.x + (100/camera.scale)) > (camera.args.panTarget.x) then
+                            camera.follow_lerp_x = 1
+                            camera.x = math.floor(camera.x)
+                            first = true
+                    end
+                    if camera.y + (100/camera.scale) > camera.args.panTarget.y then
+                            camera.follow_lerp_y = 1
+                            camera.y = math.floor(camera.y)
+                            second = true
+                    end
+
+                    if first and second then
+
+                            camera.args.panTarget = false
+                    end
                 end
 
                 if camera.args.smoothScale then
                     local old = camera.args.smoothScale[1]
                     local new = camera.args.smoothScale[2]
-                    local factor = lume.lerp(old, new, 0.5)
+                    local speed = camera.args.smoothScale[3]/2
+                    local factor = lume.lerp(camera.scale, new, 0.5)
 
-                    if not camera.scale ~= newScale then
-                        if camera.scale < factor then
-                            camera.scale = camera.scale + 0.001
+                    if camera.scale > new then
+                        if camera.scale < new then
+                            camera.scale = camera.scale + (speed * 0.1)*factor
                         else
-                            camera.scale = camera.scale - 0.001
+                            camera.scale = camera.scale - (speed*factor*0.1)*factor
                         end
                     end
                 end
@@ -134,11 +169,11 @@ end
 
 function Cinema:debugPreset(cameraName)
     local camera = self.listOfCameras[cameraName]
-    camera.scale = 1.5
+    camera.scale = 2.5
     camera.x = camera.x + love.graphics.getWidth()
-    camera.y = camera.y + love.graphics.getHeight()
-    camera:setFollowLerp(0.01)
-    camera:setFollowStyle('TOPDOWN')
+    camera.y = camera.y + love.graphics.getHeight() + 200
+    -- camera:setFollowLerp(0.01)
+    camera:setFollowStyle('LOCKON')
 end
 
 return Cinema

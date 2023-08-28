@@ -30,6 +30,8 @@ function State.gameScreen:init()
         map:draw()
     end)
 
+    self.cinema:setPosition('debug', 4150, 3020)
+    self.cinema:setCameraProperty('debug', 'scale', 0.15)
 
     self.cinema:attach('UI', function(args)
         local progress = args.progress
@@ -63,7 +65,7 @@ function State.gameScreen:init()
     end)
 
     self.cinema:setArg('UI', 'progress', 1)
-    self.cinema:setArg('UI', 'roomsLoaded', 2)
+    self.cinema:setArg('UI', 'roomsLoaded', 1)
 
     map:init()
 
@@ -113,8 +115,9 @@ function State.gameScreen:update(dt)
     local test = love.thread.getChannel('load'):pop()
 
     if test then
-        progress = test[1]/test[2]
-        roomsLoaded = test[3] or roomsLoaded
+        self.cinema:setArg('UI', 'state', test[1])
+        progress = test[2]/test[3]
+        roomsLoaded = test[2] or roomsLoaded
     end
 
     self.cinema:setArg('UI', 'progress', progress)

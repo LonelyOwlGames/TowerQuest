@@ -135,7 +135,7 @@ function Tile:serialize()
     local t = {}
 
     for key, data in pairs(self) do
-        if key ~= 'neighbors' then
+        if key ~= 'neighbors' and key ~= 'previous' then
             t[key] = data
         end
     end

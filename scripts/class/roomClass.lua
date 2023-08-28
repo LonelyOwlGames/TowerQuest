@@ -28,6 +28,8 @@ function Room:init()
     self.x = 1
     self.y = 1
 
+    self.children = 0
+
     self.tileCache = {}
 
     self.connectedRooms = {}
