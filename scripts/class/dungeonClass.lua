@@ -381,6 +381,41 @@ function dungeonClass:_getRoomByID(id)
     return self.listOfRooms[id]
 end
 
+function dungeonClass:_resolveCornerDoors(tile)
+    local neighbors = self:_getTileNeighbors(tile)
+
+    local up = neighbors[1] or false
+    local down = neighbors[2] or false
+    local left = neighbors[3] or false
+    local right = neighbors[4] or false
+
+    -- Add walls to north/south doors.
+    if #neighbors == 4 then
+        if up and up.type == 'floor' then
+            if down and down.type == 'floor' then
+                if left and left.type == 'floor' then
+                    left.type = 'wall'
+                end
+
+                if right and right.type == 'floor' then
+                    right.type = 'wall'
+                end
+            end
+        end
+
+        if left and left.type == 'floor' then
+            if right and right.type == 'floor' then
+                if up and up.type == 'floor' then
+                    up.type = 'wall'
+                end
+
+                if down and down.type == 'floor' then
+                    down.type = 'wall'
+                end
+            end
+        end
+    end
+end
 
 --- Resolve overlapping wall conflicts, and place doors.
 -- @lfunction dungeonClass:_resolveOverlappingWalls
@@ -402,10 +437,12 @@ function dungeonClass:_resolveOverlappingWalls(room)
         if select == n then
             wall1.type = 'door'
             wall2.type = 'empty'
+            self:_resolveCornerDoors(wall1)
         else
             wall1.type = 'wall'
             wall2.type = 'empty'
         end
+
 
         self.numberOfDoors = self.numberOfDoors + 1
     end
