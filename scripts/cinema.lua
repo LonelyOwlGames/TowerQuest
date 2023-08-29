@@ -14,6 +14,7 @@ function Cinema:init()
 
     self.listOfCameras = {}
 
+
     -- local playerCamera = Camera()
     -- playerCamera.scale = 0.5
     -- playerCamera:setFollowStyle('NO_DEADZONE')
@@ -97,10 +98,68 @@ function Cinema:setCameraShader(cameraName, shader)
     camera.args.shader = shader
 end
 
+function Cinema:enableDrag(cameraName)
+    local camera = self.listOfCameras[cameraName]
+    if not camera.args then camera.args = {} end
+
+    camera.args.tx = camera.x
+    camera.args.ty = camera.y
+
+    -- camera.args.tx = -(love.graphics.getWidth())/2
+    -- camera.args.ty = -(love.graphics.getHeight())/2
+end
+
+function Cinema:mouseMoved(x, y, dx, dy)
+    local camera
+
+    for _, cams in pairs(self.listOfCameras) do
+        if cams.args and cams.args.tx and cams.args.ty then
+            camera = cams
+            break
+        end
+    end
+
+    if camera then
+        if love.mouse.isDown(1) then
+            camera.args.tx = (camera.x + -(math.floor(dx*5))) -- *5 multiplier
+            camera.args.ty = (camera.y + -(math.floor(dy*5)))
+        else
+            camera.args.tx = camera.x
+            camera.args.ty = camera.y
+        end
+    end
+end
+
+function Cinema:enableScrolling(cameraName)
+    local camera = self.listOfCameras[cameraName]
+
+    camera.args.scrollScale = camera.scale
+end
+
+function Cinema:wheelmoved(x, y)
+    local camera
+
+    for _, cam in pairs(self.listOfCameras) do
+        if cam.args and cam.args.scrollScale then
+            cam.args.scrollScale = cam.scale + (y*0.015)
+        end
+    end
+end
+
 function Cinema:update(dt)
     for _, camera in pairs(self.listOfCameras) do
         if camera.active then
             camera:update(dt)
+
+            -- For dragging, if camera:enableDragging
+            if camera.args and camera.args.tx and camera.args.ty then
+                camera.x = camera.args.tx
+                camera.y = camera.args.ty
+            end
+
+            if camera.args and camera.args.scrollScale then
+                camera.scale = camera.args.scrollScale
+            end
 
             if camera.args then 
                 if camera.args.panTarget then

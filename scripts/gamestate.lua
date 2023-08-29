@@ -31,7 +31,9 @@ function State.gameScreen:init()
     end)
 
     self.cinema:setPosition('debug', 4150, 3020)
+    self.cinema:enableDrag('debug')
     self.cinema:setCameraProperty('debug', 'scale', 0.15)
+    self.cinema:enableScrolling('debug')
 
     self.cinema:attach('UI', function(args)
         local progress = args.progress
@@ -81,6 +83,10 @@ function State.gameScreen:init()
 end
 
 function State.gameScreen:enter(old_state)
+end
+
+function State.gameScreen:mousemoved(x, y, d, x)
+    self.cinema:mouseMoved(x,y,d,x)
 end
 
 function State.gameScreen:resize()
@@ -137,6 +143,7 @@ function State.gameScreen:mousepressed(x, y, button)
 end
 
 function State.gameScreen:wheelmoved(x, y)
+    self.cinema:wheelmoved(x,y)
 end
 
 ---------------------------------------------------------

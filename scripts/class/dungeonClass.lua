@@ -381,6 +381,7 @@ function dungeonClass:_getRoomByID(id)
     return self.listOfRooms[id]
 end
 
+
 --- Resolve overlapping wall conflicts, and place doors.
 -- @lfunction dungeonClass:_resolveOverlappingWalls
 function dungeonClass:_resolveOverlappingWalls(room)

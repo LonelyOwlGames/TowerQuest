@@ -44,19 +44,21 @@ newDungeon.changes = {}
 -- To make this tile. change newDungeon.numberOfRooms to #analyzeData
 -- and change 'room' to 'tile'. Then comment out room code after count code.
 count = 0
-while (count < newDungeon.numberOfRooms) do
+while (count < #analyzeData) do
     count = count + 1
     
-    local room = listOfRooms[count]
-    table.insert(newDungeon.changes, room)
+    -- local room = listOfRooms[count]
+    -- table.insert(newDungeon.changes, room)
     
 
-    -- table.insert(newDungeon.changes, analyzeData[count])
-    local changes = newDungeon:serializeChanges('room')
+    table.insert(newDungeon.changes, analyzeData[count])
+    local changes = newDungeon:serializeChanges('tile')
 
-    love.thread.getChannel('load'):push({'Loading Room Analysis', count, newDungeon.numberOfRooms})
-    love.thread.getChannel('info'):push({'room', changes})
+    love.thread.getChannel('load'):push({'Loading Room Analysis', count, #analyzeData})
+    love.thread.getChannel('info'):push({'tile', changes})
 end
+
+
 
 -- local serialized = newDungeon:serialize(newDungeon)
 -- love.thread.getChannel('load'):push({'done', 1, 1})
