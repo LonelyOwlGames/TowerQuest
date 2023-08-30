@@ -21,6 +21,7 @@ local Class = require 'libraries.hump.class'
 local roomClass = require 'scripts.class.roomClass'
 local bitser = require 'libraries.bitser'
 local CA = require 'scripts.class.cellular'
+local Themes = require 'scripts.prefabs.generationThemes'
 local dungeonClass = Class{}
 
 -- Lua GEMS says this is faster for large iterators.
@@ -36,6 +37,9 @@ local sort = table.sort
 local insert = table.insert
 
 
+local function printc(text)
+    return love.thread.getChannel('console'):push(text)
+end
 
 --- Generates a unique UUID for rooms.
 local function _createUUID()
@@ -50,18 +54,16 @@ end
 
 function dungeonClass:init(width, height)
     self.id = 1
-    self.numberOfRooms = 0
-    self.numberOfDoors = 0
-    self.numberOfTiles = 0
     self.first = true
+    self.overlappingTiles = {}
 
-    self.maxDensity = 50 -- % to fill. (max ~70-80%)
+    self.maxDensity = 42 -- % to fill. (max ~70-80%)
 
     local ratio = self.maxDensity / 20
 
     -- TODO: Need an algorithm for pre-determining width & height based on density.
-    self.width = self.maxDensity*2
-    self.height = self.maxDensity*2
+    self.width = self.maxDensity*5
+    self.height = self.maxDensity*5
 
     self.startx = 1
     self.starty = 1
@@ -84,47 +86,82 @@ function dungeonClass:init(width, height)
     self.changes = {} -- experiment with changes stack
 end
 
+function dungeonClass:_createSquare(data)
+    local w1, w2 = data.w[1], data.w[2] or data.w[1]
+    local h1, h2 = data.h[1], data.h[2] or data.h[1]
+    return roomClass():generateSquareRoom(random(w1, w2), random(h1, h2))
+end
+
+function dungeonClass:_createCircle(data)
+    local r1, r2 = data.r[1], data.r[2] or data.r[1]
+    return roomClass():generateCircleRoom(random(r1, r2))
+end
+
+function dungeonClass:_createRoom(data)
+    if data.shape == 'square' then
+        local w1, w2 = data.w[1], data.w[2] or data.w[1]
+        local h1, h2 = data.h[1], data.h[2] or data.h[1]
+        return roomClass():generateSquareRoom(random(w1, w2), random(h1, h2))
+    elseif data.shape == 'circle' then
+        local r1, r2 = data.r[1], data.r[2] or data.r[1]
+        return roomClass():generateCircleRoom(random(r1, r2))
+    elseif data.shape == 'hallway' then
+        return roomClass():loadHallwayFromPrefab(data)
+    end
+end
+
 --- Generates a random pre-authored room.
 -- @lfunction dungeonClass:generateRoom
 function dungeonClass:_generateRandomRoom()
-    local select = random(1,10)
+    local theme = Themes.dungeon
     local r
 
-    if select == 1 then -- Horizontal rectangle
-        r = roomClass():generateSquareRoom(random(3,4), random(6,7))
-    elseif select == 2 then -- Vertical rectangle
-        r = roomClass():generateSquareRoom(random(6,7), random(3,4))
-    elseif select == 3 then -- Cross or L rectangles
-        local a = roomClass():generateSquareRoom(random(2,4), random(6,8))
-        local b = roomClass():generateSquareRoom(random(6,8), random(2,4))
-        r = a:combineWith(b, random(-1,1),random(-1,1))
-    elseif select == 4 then -- Square + circle
-        local a = roomClass():generateSquareRoom(random(2,4), random(2,4))
-        local b = roomClass():generateCircleRoom(random(3,6))
-        r = a:combineWith(b, random(-1,1),random(-1,1))
-    elseif select == 5 then -- double circle + square
-        local a = roomClass():generateCircleRoom(random(4,6))
-        local b = roomClass():generateCircleRoom(random(4,8))
-        local c = roomClass():generateSquareRoom(random(6,8), random(2,4))
-        r = a:combineWith(b, random(-1,1), random(-1,1))
-        r = r:combineWith(c, random(-2,2), random(-2,2))
-    elseif select == 6 then -- CA blob + square
-        local a = roomClass():generateCARoom(10, 10)
-        local b = roomClass():generateSquareRoom(random(4,8), random(4,8))
-        r = a:combineWith(b, random(-1,1), random(-1,1))
-    elseif select == 7 then -- big CA blob
-        r = roomClass:generateCARoom(20,20)
-    elseif select == 8 then -- two small CA blobs
-        local a = roomClass():generateCARoom(10,10)
-        local b = roomClass():generateCARoom(10,10)
-        r = a:combineWith(b, 0, 0)
-    elseif select == 9 then -- big circle
-        r = roomClass():generateCircleRoom(random(8,12))
-    elseif select == 10 then -- big t
-        local a = roomClass():generateSquareRoom(random(6,8), random(10,12))
-        local b = roomClass():generateSquareRoom(random(10,12), random(6,8))
-        r = a:combineWith(b, random(-2,2), random(-2,2))
+    local roomType = theme.types[math.random(1, #theme.types)]
+
+    if roomType.shape == 'combine' then
+        local roomA = self:_createRoom(roomType.combine[1])
+        local roomB = self:_createRoom(roomType.combine[2])
+        r = roomA:combineWith(roomB, roomType.offset[1], roomType.offset[2])
+    else
+        r = self:_createRoom(roomType)
     end
+
+    --
+    -- if select == 1 then -- Horizontal rectangle
+    --     r = roomClass():generateSquareRoom(random(3,4), random(6,7))
+    -- elseif select == 2 then -- Vertical rectangle
+    --     r = roomClass():generateSquareRoom(random(6,7), random(3,4))
+    -- elseif select == 3 then -- Cross or L rectangles
+    --     local a = roomClass():generateSquareRoom(random(2,4), random(6,8))
+    --     local b = roomClass():generateSquareRoom(random(6,8), random(2,4))
+    --     r = a:combineWith(b, random(-1,1),random(-1,1))
+    -- elseif select == 4 then -- Square + circle
+    --     local a = roomClass():generateSquareRoom(random(2,4), random(2,4))
+    --     local b = roomClass():generateCircleRoom(random(3,6))
+    --     r = a:combineWith(b, random(-1,1),random(-1,1))
+    -- elseif select == 5 then -- double circle + square
+    --     local a = roomClass():generateCircleRoom(random(4,6))
+    --     local b = roomClass():generateCircleRoom(random(4,8))
+    --     local c = roomClass():generateSquareRoom(random(6,8), random(2,4))
+    --     r = a:combineWith(b, random(-1,1), random(-1,1))
+    --     r = r:combineWith(c, random(-2,2), random(-2,2))
+    -- elseif select == 6 then -- CA blob + square
+    --     local a = roomClass():generateCARoom(10, 10)
+    --     local b = roomClass():generateSquareRoom(random(4,8), random(4,8))
+    --     r = a:combineWith(b, random(-1,1), random(-1,1))
+    -- elseif select == 7 then -- big CA blob
+    --     r = roomClass:generateCARoom(20,20)
+    -- elseif select == 8 then -- two small CA blobs
+    --     local a = roomClass():generateCARoom(10,10)
+    --     local b = roomClass():generateCARoom(10,10)
+    --     r = a:combineWith(b, 0, 0)
+    -- elseif select == 9 then -- big circle
+    --     r = roomClass():generateCircleRoom(random(8,12))
+    -- elseif select == 10 then -- big t
+    --     local a = roomClass():generateSquareRoom(random(6,8), random(10,12))
+    --     local b = roomClass():generateSquareRoom(random(10,12), random(6,8))
+    --     r = a:combineWith(b, random(-2,2), random(-2,2))
+    -- end
 
     r.id = _createUUID()
     r:assignRoomIds(r.id)
@@ -132,34 +169,22 @@ function dungeonClass:_generateRandomRoom()
     return r
 end
 
+
 local function sortByConnections(a,b)
-    return #a.connectedRooms < #b.connectedRooms
+    return #a.children < #b.children
 end
 
 --- Returns a random room Object from dungeonClass.listOfRooms.
 -- @lfunction dungeonClass:_getRandomRoom
-function dungeonClass:_getRandomRoom(attempts, backStep) --PERF: Hash Maps Only
+function dungeonClass:_getRandomRoom(attempts,backStep) --PERF: Hash Maps Only
     backStep = backStep or 0
 
     -- Sort rooms by least connected rooms.
     sort(self.roomHistory, sortByConnections)
 
-    -- If we need to step back, pop the top.
-    if backStep > 0 then
-        for n = 1, backStep do
-            remove(self.roomHistory, n)
-        end
-    end
-
     -- Return popped value.
-    return self.roomHistory[1]
+    return self.roomHistory[backStep + 1]
 end
-
---- For performance. Returns listOfRooms index based on roomid
-function dungeonClass:_getRoomIndex(roomid) --PERF: Hash maps only
-    return self.listOfRoomsIndex(roomid)
-end
-
 
 --- Retrieve a tile Object from a Room id.
 -- @lfunction dungeonClass:_getTileByRoomID
@@ -192,11 +217,32 @@ end
 --- "Throw" a generated room at the dungeon. If it is 
 --a valid placement, place the room into the dungeon.
 -- @lfunction dungeonClass:_throwRoomAtDungeon
+local iter = 0
 function dungeonClass:_throwRoomAtDungeon(room, attempts, mod)
+    iter = iter + 1
     attempts = attempts or 0
+
+    if mod then 
+        -- print('throw called with mod at iteration .. ', iter) 
+        -- print('room history before: ' .. #self.roomHistory .. ' | next room history should be: ' .. #self.roomHistory - 1)
+    end
 
     local roomWidth, roomHeight = room:getRoomDimensions()
     local targetRoom = self:_getRandomRoom(attempts, mod)
+
+    if not targetRoom then 
+        -- error('ran out of history') end -- error('No targetRoom selected by getRandomRoom. Likely the dungeon width/height not right') end
+        local newRoom = self:_generateRandomRoom()
+        return self:_throwRoomAtDungeon(newRoom, 1)
+    end
+
+    -- print('last room type: ' .. room.type, targetRoom.type, #self.roomHistory, #targetRoom.connectedRooms)
+
+    -- Don't connect hallways to hallways
+    if room.type == 'hallway' and targetRoom.type == 'hallway' then
+        local newRoom = self:_generateRandomRoom()
+        return self:_throwRoomAtDungeon(newRoom, attempts + 1)
+    end
 
 
     local rx, ry = targetRoom:getPosition()
@@ -217,8 +263,8 @@ function dungeonClass:_throwRoomAtDungeon(room, attempts, mod)
     for y = startY, endY do
         for x = startX, endX do
             if self:_isValidRoomPlacement(room, x, y, targetRoom) then
-                targetRoom:connectTo(room.id)
-                targetRoom.children = room.children + 1 or 1
+                -- targetRoom:connectTo(room.id)
+                -- targetRoom.children = room.children + 1 or 1
                 self:_addRoom(room, x, y)
                 return true
             end
@@ -247,6 +293,8 @@ function dungeonClass:_isValidRoomPlacement(room, x, y, target)
     local overlappingWallCount = 0
     local overlappingFloorCount = 0
     local listOfConnectedWalls = {}
+    local overlappingTiles = {}
+    local parent
 
     for ry = 1, #room.tiles do
         for rx = 1, #room.tiles[ry] do
@@ -259,16 +307,47 @@ function dungeonClass:_isValidRoomPlacement(room, x, y, target)
             local targetedTileRoomID = self.tileCache[y + ry][x + rx] -- <- returns roomid now 
             local targetedTile = self:_getTile(x + rx, y + ry)
 
-
             -- Check where we would place our tile, and see what is there.
             if targetedTileRoomID then
                 if not targetedTile then return false end
 
-                if roomTile:getType('wall') and targetedTile:getType('wall') and targetedTileRoomID == target.id then
-                    insert(listOfConnectedWalls, {roomTile, targetedTile})
+                -- These three returns prevent rooms being placed too closely to hallways.
+                if roomTile:getType('wall') and targetedTile.type == 'ignore' then
+                    return false
+                end
+
+                if roomTile:getType('floor') and targetedTile.type == 'ignore' then
+                    return false
+                end
+
+                if roomTile:getType('ignore') and targetedTile.type ~= 'empty' then
+                    return false
+                end
+
+                -- Count overlapping tiles with doors when attaching room to hallway
+                if roomTile:getType('wall') and targetedTile.type == 'wall' and targetedTileRoomID == target.id then
+                    parent = target
+                    -- insert(listOfConnectedWalls, {roomTile, targetedTile, roomType = target.type})
+                    -- overlappingTiles = {roomTile, targetedTile}
+                    insert(overlappingTiles, {roomTile, targetedTile})
                     overlappingWallCount = overlappingWallCount + 1
                 end
 
+                -- If we're connected to a door, resolve the overlap (regardless if it works)
+                -- if roomTile:getType('wall') and targetedTile.type == 'door' then
+                    -- insert(listOfConnectedWalls, {roomTile, targetedTile, roomType = target.type})
+                -- end
+
+                -- When placing a room, count overlapping walls. Must be at least 3
+                if roomTile:getType('door') and targetedTile.type == 'wall' and targetedTileRoomID == target.id then
+                    -- insert(listOfConnectedWalls, {roomTile, targetedTile, roomType = target.type})
+                    -- overlappingTiles = {roomTile, targetedTile}
+                    insert(overlappingTiles, {roomTile, targetedTile})
+                    parent = target
+                    overlappingWallCount = overlappingWallCount + 1
+                end
+
+                -- Don't place a room where a floor tile overlaps any tile of another room.
                 if roomTile:getType('floor') and not targetedTile:getType('empty') then
                     overlappingFloorCount = overlappingFloorCount + 1
                     return false -- Exits quicker, more efficient.
@@ -277,12 +356,34 @@ function dungeonClass:_isValidRoomPlacement(room, x, y, target)
         end
     end
 
-    if overlappingWallCount > 0 and overlappingFloorCount == 0 then
-        room.connectedWallTiles = listOfConnectedWalls
-        return true
-    else
-        return false
+    -- When placing a hallway into the map
+    if room.type == 'hallway' then
+        if overlappingWallCount >= 3 then
+            insert(parent.children, room)
+            for n = 1, #overlappingTiles do
+                insert(self.overlappingTiles, {tiles = overlappingTiles[n], count = overlappingWallCount})
+            end
+            return true
+        end
+    elseif target.type == 'hallway' then -- When connecting TO a hallway
+        if overlappingWallCount >= 2 then
+            insert(parent.children, room)
+            for n = 1, #overlappingTiles do
+                insert(self.overlappingTiles, {tiles = overlappingTiles[n], count = overlappingWallCount})
+            end
+            return true
+        end
+    else -- When connecting room to room
+        if overlappingWallCount >= 2 then
+            insert(parent.children, room)
+            for n = 1, #overlappingTiles do
+                insert(self.overlappingTiles, {tiles = overlappingTiles[n], count = overlappingWallCount})
+            end
+            return true
+        end
     end
+
+    return false
 end
 
 --- Place room into dungeon at (x,y), assign the room a UUID.
@@ -293,46 +394,74 @@ function dungeonClass:_addRoom(roomToAdd, x, y, customID)
     addedRoom.id = customID or _createUUID()
     addedRoom:assignRoomIds(addedRoom.id)
 
+    local tileCount = 0
+
     -- Add room tiles to dungoen tileCache for quicker generation
     for ry = 1, #roomToAdd.tiles do
         for rx = 1, #roomToAdd.tiles[ry] do
             if not roomToAdd.tiles[ry][rx]:getType('empty') then
                 self.tileCache[ry + y][rx + x] = addedRoom.id
+                tileCount = tileCount + 1
             end
         end
     end
 
-    self.numberOfRooms = self.numberOfRooms + 1
-
     -- Add room to list of rooms in dungeon
     self.listOfRooms[addedRoom.id] = addedRoom
-    self.listOfRoomsIndex[self.numberOfRooms] = addedRoom.id
 
     -- Cannot add directly due to roomHistory containing nils.
     insert(self.roomHistory, addedRoom)
 
-    self.changes[1] = addedRoom
+    love.thread.getChannel('stats'):push({roomsLoaded = self:getNumberOfRooms(), tilesCreated = tileCount})
+    love.thread.getChannel('console'):push('Added room: ' .. addedRoom.id .. ' at position: (' .. addedRoom.x .. ',' .. addedRoom.y .. ') with type: ' .. addedRoom.type)
+
+    insert(self.changes, addedRoom)
+    -- self.changes[1] = addedRoom
 end
 
 function dungeonClass:serializeChanges(type)
     local data = {}
     
     if type == 'room' then
-        local room = self.changes[1]
+        if #self.changes > 1 then
+            local room
+            for _, change in pairs(self.changes) do
+                room = change
 
-        if room then
-            remove(self.changes, 1)
+                if room then
+                    local roomData = room:serialize()
 
-            local roomData = room:serialize()
+                    insert(data, roomData)
+                end
+            end
 
-            -- data[room.id] = roomData
-            insert(data, roomData)
-        end
+            if data and room then
+                return bitser.dumps(data)
+            else
+                return false
+            end
 
-        if data and room then
-            return bitser.dumps(data)
+
+
+
+        
         else
-            return false
+            local room = self.changes[1]
+
+            if room then
+                remove(self.changes, 1)
+
+                local roomData = room:serialize()
+
+                -- data[room.id] = roomData
+                insert(data, roomData)
+            end
+
+            if data and room then
+                return bitser.dumps(data)
+            else
+                return false
+            end
         end
     elseif type == 'tile' then
         if #self.changes > 1 then
@@ -419,35 +548,113 @@ end
 
 --- Resolve overlapping wall conflicts, and place doors.
 -- @lfunction dungeonClass:_resolveOverlappingWalls
-function dungeonClass:_resolveOverlappingWalls(room)
-    if not room.connectedWallTiles then return end
+function dungeonClass:_resolveOverlappingWalls(overlap, index)
+    -- if not overlap then return end
+    --
+    -- local tilesChanged = {}
+    --
+    -- local t1, t2 = overlap.tiles[1], overlap.tiles[2]
+    -- local r1, r2 = self.listOfRooms[t1.roomid], self.listOfRooms[t2.roomid]
+    --
+    -- if t1.type == 'door' and t2.type == 'wall' then
+    --     t2.type = 'empty'
+    --     insert(self.changes, t2)
+    --     return
+    -- end
+    --
+    -- -- Look for tiles that were set to empty, but are
+    -- -- still in overlap list. (Deleted hallways for example).
+    -- if t1.type == 'empty' then
+    --     t1.type = 'wall'
+    --     t2.type = 'empty'
+    --     insert(self.changes, t1)
+    --     table.remove(self.overlappingTiles, index)
+    --     return
+    -- end
+    --
+    -- -- If a door from a hallway exists, connect that room
+    -- if t1.type == 'door' then
+    --     t2.type = 'empty'
+    --     insert(self.changes, t1)
+    --     table.remove(self.overlappingTiles, index)
+    --     return
+    -- end
+    --
+    -- local room = self.listOfRooms[t1.roomid]
+    -- room._hasDoor = room._hasDoor or false
+    --
+    -- -- printc(overlap.count .. '|' .. room.id .. ' ' .. t1.roomid .. ' | ' .. t2.roomid)
+    -- printc(index)
+    --
 
-    local select = random(1, #room.connectedWallTiles)
 
-    -- Based on how dungeon generation works, connected wall tiles are the only
-    -- tiles that overlap and need to be resolved
-    for n, conflictingTiles in pairs(room.connectedWallTiles) do
-        local wall1 = conflictingTiles[1]
-        local wall2 = conflictingTiles[2]
-        wall1.roomid = wall1.roomid or 'no id'
-        wall2.roomid = wall2.roomid or 'no id'
+    -- insert(self.changes, t1)
 
-        -- Wall 1 is always in room, wall2 is connecting room
-        -- Discard wall 2's in favor of wall 1's
-        if select == n then
-            wall1.type = 'door'
-            wall2.type = 'empty'
-            self:_resolveCornerDoors(wall1)
-        else
-            wall1.type = 'wall'
-            wall2.type = 'empty'
-        end
+    -- insert(self.changes, t1)
 
 
-        self.numberOfDoors = self.numberOfDoors + 1
-    end
+    -- self.changes = tilesChanged
 
-    insert(self.changes, room)
+    -- NEW METHOD
+    -- 1. Scan wall, set prev tiles to empty and use new tiles
+    
+    -- for n, conflictingTiles in pairs(room.connectedWallTiles) do
+    --     local curWall = conflictingTiles[1]
+    --     local prevWall = conflictingTiles[2]
+    --     local connectionType = conflictingTiles.roomType
+    --
+    --     -- When hallways are connected TO
+    --     -- prevWall will equal door when found.
+    --     if connectionType == 'hallway' then
+    --         if prevWall.type == 'door' then
+    --             doorCount = doorCount + 1
+    --             curWall.type = 'door'
+    --             prevWall.type = 'empty'
+    --             love.thread.getChannel('stats'):push({doorsCreated = 1})
+    --         else
+    --             curWall.type = 'wall'
+    --             prevWall.type = 'empty'
+    --         end
+    --
+    --         return
+    --     elseif room.type == 'hallway' then -- When hallways are conncted With
+    --         if prevWall.type == 'door' then -- currWall will equal 'door'
+    --             doorCount = doorCount + 1
+    --             curWall.type = 'fill'
+    --             prevWall.type = 'empty'
+    --             love.thread.getChannel('stats'):push({doorsCreated = 1})
+    --         else
+    --             curWall.type = 'fill'
+    --             prevWall.type = 'empty'
+    --         end
+    --     else -- Room to room connection
+    --         if select == n then
+    --             doorCount = doorCount + 1
+    --             curWall.type = 'door'
+    --             prevWall.type = 'empty'
+    --             self:_resolveCornerDoors(curWall)
+    --             love.thread.getChannel('stats'):push({doorsCreated = 1})
+    --         else
+    --             curWall.type = 'wall'
+    --             prevWall.type = 'empty'
+    --         end
+    --     end
+    -- end
+    --
+    -- love.thread.getChannel('console'):push(
+    --     'Resolved overlapping walls for room type '
+    --     .. room.type
+    --     .. ' at position: ('
+    --     .. room.x .. ',' .. room.y
+    --     .. ')')
+    -- love.thread.getChannel('console'):push(
+    --     '^- Doors Added: '
+    --     ..doorCount
+    -- )
+    --
+    --
+
+    -- insert(self.changes, parent)
 end
 
 function dungeonClass:_getAllTilesAsNodes()
@@ -457,9 +664,8 @@ function dungeonClass:_getAllTilesAsNodes()
         for x = 1, #self.tileCache[y] do
             local tile = self:_getTile(x, y)
 
-            if tile then
+            if tile and tile.type ~= 'ignore' and tile.type ~= 'empty' then
                 insert(grid, tile)
-                self.numberOfTiles = self.numberOfTiles + 1
             end
         end
     end
@@ -487,6 +693,8 @@ end
 function dungeonClass:_getMapValue(node)
     if node.type == 'wall' then
         return huge
+    elseif node.type == 'door' then
+        return 20
     else
         return 1
     end
@@ -512,11 +720,11 @@ function dungeonClass:_dijkstra(source)
     while (#listOfNodes > 0) do
 
         -- Just for visual loading
-        local test_count = ((self.numberOfTiles)-(floor(#listOfNodes)))*10
-        local test_max = self.numberOfTiles
-        if test_count < test_max then
-            love.thread.getChannel('load'):push({'Analyzing Tiles (Dijkstra)', test_count, test_max})
-        end
+        -- local test_count = ((self.numberOfTiles)-(floor(#listOfNodes)))*10
+        -- local test_max = self.numberOfTiles
+        -- if test_count < test_max then
+            -- love.thread.getChannel('load'):push({'Analyzing Tiles (Dijkstra)', test_count, test_max})
+        -- end
 
         local currentNode = listOfNodes[1]
         -- listOfNodes[1] = {}
@@ -593,20 +801,6 @@ function dungeonClass:_floodFillTile(start, list)
     return list
 end
 
-function dungeonClass:drawDebug()
-    for _, room in pairs(self.listOfRooms) do
-        for y = 1, #room.tiles do
-            for x = 1, #room.tiles[y] do
-                local tile = room.tiles[y][x]
-
-                if tile and tile.distance then
-                    love.graphics.rectangle('line', tile.wx, tile.wy, 64, 64)
-                end
-            end
-        end
-    end
-end
-
 local function _getTileFromStart(dungeon)
     local room = dungeon.listOfRooms['start']
 
@@ -643,12 +837,60 @@ function dungeonClass:analyzeMapConnectivity()
     return listOfNodes
 end
 
+function dungeonClass:getNumberOfRooms()
+    local count = 0
+
+    for _, room in pairs(self.listOfRooms) do
+        count = count + 1
+    end
+
+    return count
+end
+
+function dungeonClass:deleteRoom(room)
+    local doorCount = 0
+    local tileCount = 0
+
+    for y = 1, #room.tiles do
+        for x = 1, #room.tiles[y] do
+            local wx, wy = room.tiles[y][x].wx, room.tiles[y][x].wy
+
+            if room.tiles[y][x].type == 'door' then
+                doorCount = doorCount + 1
+            end
+
+            if room.tiles[y][x].type ~= 'empty' then
+                tileCount = tileCount + 1
+            end
+            
+            if self.tileCache[wy][wx] then
+                self.tileCache[wy][wx] = false
+            end
+
+        end
+    end
+
+    self.listOfRooms[room.id] = nil
+    room:delete()
+end
+
+function dungeonClass:removeBadHallways(room)
+    if room.type == 'hallway' then
+        if #room.children == 0 and room.id ~= 'start' then
+            self:deleteRoom(room)
+            insert(self.changes, room)
+        end
+    end
+
+    love.thread.getChannel('stats'):push({roomsDeleted = (self.maxDensity - self:getNumberOfRooms())})
+end
+
 --- Starts dungeon generation.
 -- @usage Dungeon():buildDungeon()
 function dungeonClass:buildDungeon()
     if self.first then
         local startingRoom = self:_generateRandomRoom()
-        self:_addRoom(startingRoom, 15, 15, 'start')
+        self:_addRoom(startingRoom, 15, 25, 'start')
         self.roomHistory[1] = startingRoom
         self.first = false
 
@@ -663,7 +905,7 @@ function dungeonClass:buildDungeon()
     -- self:_resolveOverlappingWalls(room)
 
     -- Intentionally slow down recursion
-    -- love.timer.sleep(self.sleep)
+    love.timer.sleep(self.sleep)
 
 
     -- collectgarbage('collect')

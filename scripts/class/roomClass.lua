@@ -18,6 +18,7 @@
 local Class = require 'libraries.hump.class'
 local tileClass = require 'scripts.class.tileClass'
 local CA = require 'scripts.class.cellular'
+local Hallway = require 'scripts.prefabs.hallways'
 local Room = Class{}
 
 function Room:init()
@@ -28,11 +29,14 @@ function Room:init()
     self.x = 1
     self.y = 1
 
-    self.children = 0
+    self.children = {}
+
+    self.type = ''
 
     self.tileCache = {}
 
     self.connectedRooms = {}
+    self.connections = {}
 end
 
 --- Creates a room buffer (hash map) for tile manipulation.
@@ -170,6 +174,7 @@ function Room:generateSquareRoom(width, height)
         end
     end
 
+    self.type = 'square'
     self:addWallsToRoom()
 
     return self
@@ -205,6 +210,7 @@ function Room:generateCircleRoom(radius)
         end
     end
 
+    self.type = 'circle'
     self:addWallsToRoom()
 
     return self
@@ -242,6 +248,7 @@ function Room:generateCARoom(width, height)
 
     local room = Room():createRoomFromTable(width, height, fill)
 
+    self.type = 'blob'
     room:addWallsToRoom()
 
     return room
@@ -419,6 +426,51 @@ function Room:createRoomFromTable(width, height, table)
     end
 
     return self
+end
+
+function Room:loadHallwayFromPrefab(data)
+    local prefab = Hallway[data.type]
+
+    self.tiles = self:_createRoomBuffer(prefab.width, prefab.height, 'empty')
+
+    for y = 1, prefab.height do
+        for x = 1, prefab.width do
+            if self.tiles[y][x] then
+                if prefab.map[y][x] == 2 then
+                    self.tiles[y][x].type = 'door'
+                end
+
+                if prefab.map[y][x] == 1 then
+                    self.tiles[y][x].type = 'floor'
+                end
+
+                if prefab.map[y][x] == 3 then
+                    self.tiles[y][x].type = 'wall'
+                end
+
+                if prefab.map[y][x] == 4 then
+                    self.tiles[y][x].type = 'ignore'
+                end
+            end
+        end
+    end
+
+    self.type = 'hallway'
+
+    return self
+end
+
+function Room:delete()
+    local tileCount = 0
+
+    for y = 1, #self.tiles do
+        for x = 1, #self.tiles[y] do
+            self.tiles[y][x].type = 'empty'
+            tileCount = tileCount + 1
+        end
+    end
+
+    love.thread.getChannel('stats'):push({tilesDeleted = tileCount})
 end
 
 --- Serialization of room, and tiles consequentially.

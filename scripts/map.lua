@@ -28,6 +28,7 @@ function map:init()
 
     self.changes = {}
     self.previousChanges = {}
+    self.cachedChanges = {}
 
     -- Initialize background tilemap
     for y = -150, 300 do
@@ -90,17 +91,28 @@ function map:update(dt, cinema)
     -- Iterate over list of previous changes, and change tile color one at a time.
     if #self.previousChanges > 0 then
         for i = 1, #self.previousChanges / 10 + 2 do
-            local change = self.previousChanges[i]
+            local previous = self.previousChanges[i]
             table.remove(self.previousChanges, i)
 
-            if change then 
+            if previous then 
+                local changeType = previous.change
+
                 self.spriteBatch:setColor(1,1,1,1)
-                if change.tile.distance then
-                    local distance = change.tile.distance
+
+                if changeType == 'update' then
+                    if previous.tile.type == 'empty' then
+                        self.spriteBatch:setColor(0,0,0,0)
+                    end
+                end
+
+                if previous.tile.distance then
+                    local distance = previous.tile.distance
                     local r,g,b,a = _HSV((distance/2)/255, 1, 1)
                     self.spriteBatch:setColor(r,g,b,a)
                 end
-                self.spriteBatch:set(change.id, change.quad, change.tile.wx*64, change.tile.wy*64)
+
+                self.spriteBatch:set(previous.id, previous.quad, previous.tile.wx*64, previous.tile.wy*64)
+                self.cachedChanges[previous.tile.id] = {id = previous.id, quad = previous.quad} -- TODO: might be slow
             end
         end
     end
@@ -116,11 +128,15 @@ function map:load()
                 local quad = self:_createTile(tile)
                 local tx, ty = tile.wx, tile.wy
 
-                if tile.type ~= 'empty' then
+                if self.cachedChanges[tile.id] then
+                    table.insert(self.previousChanges, {id = self.cachedChanges[tile.id].id, quad = quad, tile = tile, change = 'update'})
+                else
+                    if tile.type ~= 'empty' and tile.type ~= 'ignore' then
                     self.spriteBatch:setColor(0,0,0,0.3)
 
                     local id = self.spriteBatch:add(quad, tx*64, ty*64)
-                    table.insert(self.previousChanges, {id = id, quad = quad, tile = tile})
+                    table.insert(self.previousChanges, {id = id, quad = quad, tile = tile, change = 'new'})
+                    end
                 end
             end
         end
@@ -187,6 +203,7 @@ local GID = {
     ['room'] = 22,
     ['black'] = 112,
     ['fill'] = 326,
+    ['ignore'] = 0,
 }
 
 function map:_createTile(tile)
