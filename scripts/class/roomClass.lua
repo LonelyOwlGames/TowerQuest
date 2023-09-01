@@ -154,7 +154,7 @@ function Room:getRoomDimensions(excludeEmpties)
     local width = 0
 
     for y = 1, #self.tiles do
-        for x = 1, #self.tiles[y] do
+        for _ = 1, #self.tiles[y] do
             width = #self.tiles[y]
             break
         end
@@ -228,15 +228,90 @@ function Room:generateCircleRoom(radius)
     return self
 end
 
+-- Where list is a table indexed by y, x and true / false
+function Room:generateChasm(width, height)
+    local args = {}
+    args.birthLimit = 5
+    args.deathLimit = 4
+    args.startAliveChance = 40
+    args.steps = 3
+
+    local chasm = self:generateCARoom(width, height, args)
+
+    if not chasm then error('Failed to generate chasm in roomClass') end
+
+    for y = 1, #chasm.tiles do
+        for x = 1, #chasm.tiles[y] do
+            if chasm.tiles[y][x].type == 'floor' then
+                chasm.tiles[y][x].type = 'chasm'
+            end
+
+            if chasm.tiles[y][x].type == 'wall' then
+                chasm.tiles[y][x].type = 'edge'
+            end
+        end
+    end
+
+    self.type = 'chasm'
+
+    return chasm
+end
+
+function Room:applyWallsToChasm(dungeon)
+    for y = 1, #self.tiles do
+        for x = 1, #self.tiles[y] do
+            local tile = self.tiles[y][x]
+            local wx, wy = tile.wx, tile.wy
+
+            if tile.type == 'edge' then
+                local up = dungeon:_getTile(wx, wy-1)
+                local down = dungeon:_getTile(wx, wy+1)
+                local left = dungeon:_getTile(wx-1, wy)
+                local right = dungeon:_getTile(wx+1, wy)
+
+                if not up then
+                    local new = tileClass():createTile(self, x, y-1, 'wall')
+                    new.wx = wx
+                    new.wy = wy
+                    dungeon:_addTile(wx, wy-1, new)
+                end
+
+                if not down then
+                    local new = tileClass():createTile(self, x, y+1, 'wall')
+                    new.wx = wx
+                    new.wy = wy
+                    dungeon:_addTile(wx, wy+1, new)
+                end
+
+                if not left then
+                    local new = tileClass():createTile(self, x-1, y, 'wall')
+                    new.wy = wy
+                    new.wx = wx
+                    dungeon:_addTile(wx-1, wy, new)
+                end
+
+                if not right then
+                    local new = tileClass():createTile(self, x+1, y, 'wall')
+                    new.wx = wx
+                    new.wy = wy
+                    dungeon:_addTile(wx+1, wy, new)
+                end
+            end
+        end
+    end
+end
+
+
 --- Generate a Cellular Automata blob
-function Room:generateCARoom(width, height)
-    local birthLimit = 4
-    local deathLimit = 4
-    local startAliveChance = 50
-    local steps = 5
+function Room:generateCARoom(width, height, ...)
+    local args = {...}
+    args.birthLimit = args.birthLimit or 4
+    args.deathLimit = args.deathLimit or 4
+    args.startAliveChance = args.startAliveChance or 50
+    args.steps = args.steps or 5
 
     local CAMap = CA()
-    local map = CAMap:generateCAMap(width, height, birthLimit, deathLimit, startAliveChance, steps)
+    local map = CAMap:generateCAMap(width, height, args.birthLimit, args.deathLimit, args.startAliveChance, args.steps)
     local listOfFloorTiles = {}
 
     if not map then assert(map, 'Invalid map for CA room generation') return end

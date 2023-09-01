@@ -1,7 +1,4 @@
-local sti = require 'libraries/sti'
 local bitser = require 'libraries.bitser'
-local ProcGen = require 'scripts.procedural'
-local Dungeon = require 'scripts.class.dungeonClass'
 local threadCode = require 'scripts.thread'
 
 local map = {}
@@ -13,7 +10,6 @@ local map = {}
 require('love.math')
 
 
-local thread
 local timer = 0
 
 function map:init()
@@ -63,8 +59,7 @@ local function _HSV(h, s, v)
     return r+m, g+m, b+m, 0.5
 end
 
--- Passing cinema right now, need to decouple later
-function map:update(dt, cinema)
+function map:update(dt)
     timer = timer + dt
 
     local info = love.thread.getChannel('info'):pop()
@@ -82,36 +77,38 @@ function map:update(dt, cinema)
 
     -- Iterate over list of previous changes, and change tile color one at a time.
     -- for i = 1, #self.previousChanges / 10 + 2 <- used to speed up change updates
-    local test = 1
     if #self.newChanges > 0 then
-        for i = 1, math.max(math.min(#self.newChanges/32, #self.newChanges), 1) do 
+        for i = 1, math.max(math.min(#self.newChanges/32, #self.newChanges), 1) do
             local new = self.newChanges[i]
 
             table.remove(self.newChanges, i)
 
             if new.tile.type == 'ignore' then
                 self.spriteBatch:setColor(0,0,0,0)
+            elseif new.tile.type == 'chasm' then
+                local a = math.random(0.6,0.65)
+                self.spriteBatch:setColor(1,1,1,a)
             else
                 self.spriteBatch:setColor(1,1,1,1)
             end
 
-            -- -- FOr dijkstra
             if new.tile.distance then
                 local distance = new.tile.distance
-                local r,g,b,a = _HSV((distance/2)/255, 1, 0.5)
-                self.spriteBatch:setColor(r,g,b,a)
-            end
+                local r,g,b = _HSV((distance/2)/255, 1, 1.8)
+                self.spriteBatch:setColor(r,g,b,1)
+            end           -- -- FOr dijkstra
 
             self.spriteBatch:set(new.id, new.quad, new.tile.wx*64, new.tile.wy*64)
         end
     end
 
     if #self.newChanges == 0 and #self.updatedChanges > 0 then
-        for i = 1, math.max(math.min(#self.updatedChanges/32, #self.updatedChanges), 1) do 
+        for i = 1, math.max(math.min(#self.updatedChanges/32, #self.updatedChanges), 1) do
             local new = self.updatedChanges[i]
-            local old = self.cachedChanges[new.tile.wy][new.tile.wx]
+            -- local old = self.cachedChanges[new.tile.wy][new.tile.wx]
 
             table.remove(self.updatedChanges, i)
+
 
             self.spriteBatch:setColor(1,1,1,1)
             self.spriteBatch:set(new.id, new.quad, new.tile.wx*64, new.tile.wy*64)
@@ -125,7 +122,7 @@ function map:load()
             local tile = change.data
             local quad = self:_createTile(tile)
             local tx, ty = tile.wx, tile.wy
-    
+
             if tile.type == 'ignore' then
                 self.spriteBatch:setColor(0, 0, 0, 0)
             else
@@ -142,17 +139,24 @@ function map:load()
             end
 
             if change.type == 'update' then
-                local id = self.cachedChanges[ty][tx].id
-                -- quad = self.cachedChanges[ty][tx].quad
+                if self.cachedChanges[ty] and self.cachedChanges[ty][tx] then
+                    local id = self.cachedChanges[ty][tx].id
+                    self.spriteBatch:set(id, quad, tx*64, ty*64)
+                    table.insert(self.newChanges, {id = id, quad = quad, tile = tile})
+                else -- Sent updates, but also contains adds.
+                    if not self.cachedChanges[ty] then self.cachedChanges[ty] = {} end
 
-                self.spriteBatch:set(id, quad, tx*64, ty*64)
-                table.insert(self.newChanges, {id = id, quad = quad, tile = tile})
+                    local id = self.spriteBatch:add(quad, tx*64, ty*64)
+
+                    self.cachedChanges[ty][tx] = {id = id, quad = quad, tile = tile}
+                    table.insert(self.newChanges, {id = id, quad = quad, tile = tile})
+                end
             end
 
             if change.type == 'remove' then
                 if self.cachedChanges[ty] and self.cachedChanges[ty][tx] then -- Because ignored tiles aren't cached, but received here.
                     local id = self.cachedChanges[ty][tx].id
-                    local type = self.cachedChanges[ty][tx].tile.type
+                    -- local type = self.cachedChanges[ty][tx].tile.type
 
                     if tile.type ~= 'empty' then
                     self.spriteBatch:setColor(0,0,0,0)
@@ -170,21 +174,7 @@ function map:load()
                     self.cachedChanges[ty][tx] = {id = id, quad = quad, tile = tile}
                 end
             end
-                    
-
-            -- if tile.type ~= 'ignore' then
-            --     if self.cachedChanges[ty] and self.cachedChanges[ty][tx] then
-            --         table.insert(self.updatedChanges, {id = self.cachedChanges[ty][tx].id, quad = quad, tile = tile})
-            --     else
-            --         if not self.cachedChanges[ty] then self.cachedChanges[ty] = {} end
-            --
-            --         self.spriteBatch:setColor(.4,1,.8,0.3)
-            --         local id = self.spriteBatch:add(quad, tx*64, ty*64)
-            --         self.cachedChanges[ty][tx] = {id = id, quad = quad, tile = tile}
-            --         table.insert(self.newChanges, {id = id, quad = quad, tile = tile})
-            --     end
-            -- end
-        end
+       end
 
         self.changes = {}
     end
@@ -239,6 +229,8 @@ local GID = {
     ['black'] = 112,
     ['fill'] = 326,
     ['ignore'] = 0,
+    ['chasm'] = 326,
+    ['edge'] = 325,
 }
 
 function map:_createTile(tile)

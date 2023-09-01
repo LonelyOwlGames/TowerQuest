@@ -20,7 +20,6 @@
 local Class = require 'libraries.hump.class'
 local roomClass = require 'scripts.class.roomClass'
 local bitser = require 'libraries.bitser'
-local Themes = require 'scripts.prefabs.generationThemes'
 local dungeonClass = Class{}
 
 -- Lua GEMS says this is faster for large iterators.
@@ -51,16 +50,16 @@ local function _createUUID()
     return uuid
 end
 
-function dungeonClass:init()
+function dungeonClass:init(theme)
     self.id = 1
     self.first = true
+    self.theme = theme
     self.overlappingTiles = {}
 
-    self.maxDensity = 50 -- % to fill. (max ~70-80%)
+    self.maxDensity = theme.rooms -- % to fill. (max ~70-80%)
 
-    -- TODO: Need an algorithm for pre-determining width & height based on density.
-    self.width = self.maxDensity*5
-    self.height = self.maxDensity*5
+    self.width = theme.dungeonWidth
+    self.height = theme.dungeonHeight
 
     self.startx = 1
     self.starty = 1
@@ -77,6 +76,8 @@ function dungeonClass:init()
 
     self.listOfRooms = {} -- index -> room Object
     self.roomHistory = {}
+
+    self.stats = {}
 
     self.changes = {} -- experiment with changes stack
 end
@@ -102,16 +103,26 @@ function dungeonClass:_createRoom(data)
         return roomClass():generateCircleRoom(random(r1, r2))
     elseif data.shape == 'hallway' then
         return roomClass():loadHallwayFromPrefab(data)
+    elseif data.shape == 'cellauto' then
+        local w1, w2 = data.w[1], data.w[2] or data.w[1]
+        local h1, h2 = data.h[1], data.h[2] or data.h[1]
+        return roomClass():generateCARoom(random(w1, w2), random(h1,h2))
     end
 end
 
 --- Generates a random pre-authored room.
 -- @lfunction dungeonClass:generateRoom
 function dungeonClass:_generateRandomRoom()
-    local theme = Themes.dungeon
+    local theme = self.theme
     local r
 
     local roomType = theme.types[math.random(1, #theme.types)]
+    local roomWeight = roomType.weight
+    local chance = random(1, 100)
+
+    if chance > roomWeight then
+        return self:_generateRandomRoom()
+    end
 
     if roomType.shape == 'combine' then
         local roomA = self:_createRoom(roomType.combine[1])
@@ -128,19 +139,31 @@ function dungeonClass:_generateRandomRoom()
 end
 
 
+--- Sort room by (newest) room added.
 local function sortByConnections(a,b)
     return #a.children < #b.children
 end
 
--- TODO: Remove 'attempts' from _getRandomRoom.
+--- Sort room by (oldest) room added.
+local function sortByConnectionsCenter(a,b)
+    return #a.children > #b.children
+end
+
+-- TODO: Issue #12 Remove 'attempts' from _getRandomRoom.
 
 --- Returns a random room Object from dungeonClass.listOfRooms.
 -- @lfunction dungeonClass:_getRandomRoom
-function dungeonClass:_getRandomRoom(attempts, backStep) --PERF: Hash Maps Only
+function dungeonClass:_getRandomRoom(attempts, backStep)
     backStep = backStep or 0
 
-    -- Sort rooms by least connected rooms.
-    sort(self.roomHistory, sortByConnections)
+    local sortType
+    if self.theme.spanType ~= 'center' then
+        sortType = sortByConnectionsCenter
+    else
+        sortType = sortByConnections
+    end
+
+    sort(self.roomHistory, sortType)
 
     -- Return popped value.
     return self.roomHistory[backStep + 1]
@@ -148,7 +171,7 @@ end
 
 --- Retrieve a tile Object from a Room id.
 -- @lfunction dungeonClass:_getTileByRoomID
-function dungeonClass:_getTile(x, y) -- PERF: Hash maps only
+function dungeonClass:_getTile(x, y)
     if x <= self.startx or x >= self.width then return false end
     if y <= self.starty or y >= self.height then return false end
 
@@ -229,8 +252,8 @@ function dungeonClass:_isValidRoomPlacement(room, x, y, target)
 
     for ry = 1, #room.tiles do
         for rx = 1, #room.tiles[ry] do
-            if (x) <= self.starty or (x + rx) >= self.width then return false end
-            if (y) <= self.startx or (y + ry) >= self.height then return false end
+            if (x) <= self.startx or (x + rx) >= self.width then return false end
+            if (y) <= self.starty or (y + ry) >= self.height then return false end
 
             local roomTile = room.tiles[ry][rx]
 
@@ -250,6 +273,7 @@ function dungeonClass:_isValidRoomPlacement(room, x, y, target)
                 -- Check for overlaps on rooms that are not target room.
                 if roomTile:getType('floor') and not targetedTile:getType('empty') then return false end
                 if roomTile:getType('wall') and targetedTile.type == 'wall' and targetRoomID ~= target.id then return false end
+                if roomTile:getType('wall') and targetedTile.type == 'floor' then return false end
 
                 -- Count overlapping walls of room we're attaching to.
                 if roomTile:getType('wall') and targetedTile.type == 'wall' and targetRoomID == target.id then
@@ -287,12 +311,54 @@ function dungeonClass:_updateTile(x, y, newTile)
     insert(self.changes, newTile)
 end
 
+function dungeonClass:_checkForDoorPlacement(tile)
+    local neighbors = self:_getTileNeighbors(tile)
+
+    local up = neighbors[1] or false
+    local down = neighbors[2] or false
+    local left = neighbors[3] or false
+    local right = neighbors[4] or false
+
+    if #neighbors == 4 then
+        if up and up.type == 'floor' then
+            if down and down.type == 'floor' then
+                return true
+            end
+        end
+
+        if left and left.type == 'floor' then
+            if right and right.type == 'floor' then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
 function dungeonClass:_resolveOverlaps(room)
+    love.timer.sleep(self.sleep)
+
     if room.id == 'start' then return end
 
+    -- local select = math.random(2, #room._overlap)
+
+    -- List of room._overlap index's for good doors.
+    local doorCandidates = {}
+
+    for key, data in pairs(room._overlap) do
+        local tile = data[1]
+        local isGoodDoor = self:_checkForDoorPlacement(tile)
+
+        if isGoodDoor then
+            insert(doorCandidates, key)
+        end
+    end
+
+    -- FOR HALLWAYS
     -- If there are only 3 tiles to choose from, always select middle.
-    local select = math.random(2, #room._overlap)
-    if #room._overlap == 3 then select = 2 end
+    -- if #room._overlap == 3 then select = 2 end
+    local select = doorCandidates[math.random(1, #doorCandidates)]
 
     local hasDoor = false
     for n = 1, #room._overlap do
@@ -309,13 +375,14 @@ function dungeonClass:_resolveOverlaps(room)
 
             if n == select then
                 t1.type = 'door'
-                t2.type = 'empty'
-                insert(self.changes, t1)
+                -- t2.type = 'empty'
+                self:_resolveCornerDoors(t1)
             else
                 t1.type = 'wall'
-                t2.type = 'empty'
-                insert(self.changes, t1)
+                -- t2.type = 'empty'
             end
+
+            insert(self.changes, t1)
         end
     else -- Resolve overlaps for rooms that have doors differently.
         for n = 1, #room._overlap do
@@ -323,19 +390,29 @@ function dungeonClass:_resolveOverlaps(room)
 
             if t2.type == 'door' then
                 t1.type = 'door'
-                t2.type = 'empty'
+                -- t2.type = 'empty'
+
+                self:_resolveCornerDoors(t1)
                 insert(self.changes, t1)
             elseif t1.type == 'door' then
                 t1.type = 'door'
-                t2.type = 'empty'
+                -- t2.type = 'empty'
+
+                self:_resolveCornerDoors(t1)
                 insert(self.changes, t1)
             else
                 t1.type = 'wall'
-                t2.type = 'empty'
+                -- t2.type = 'empty'
                 insert(self.changes, t1)
             end
         end
     end
+end
+
+function dungeonClass:_addTile(x, y, tile)
+    printc('tile added at ' .. x .. ' ' .. y)
+    self.tileCache[y][x] = tile
+    insert(self.changes, tile)
 end
 
 --- Place room into dungeon at (x,y), assign the room a UUID.
@@ -343,6 +420,7 @@ end
 function dungeonClass:_addRoom(roomToAdd, x, y, customID)
     local addedRoom = roomToAdd:setPosition(x, y)
     addedRoom.id = customID or _createUUID()
+    addedRoom.type = roomToAdd.type
     addedRoom:assignRoomIds(addedRoom.id)
 
     local tileCount = 0
@@ -394,6 +472,8 @@ function dungeonClass:serializeChanges()
     return bitser.dumps(data)
 end
 
+--- Swaps floor tiles to wall tiles adjacent to corner doors.
+-- Needed for circle & cellular automata rooms.
 function dungeonClass:_resolveCornerDoors(tile)
     local neighbors = self:_getTileNeighbors(tile)
 
@@ -408,10 +488,12 @@ function dungeonClass:_resolveCornerDoors(tile)
             if down and down.type == 'floor' then
                 if left and left.type == 'floor' then
                     left.type = 'wall'
+                    self:_updateTile(left.wx, left.wy, left)
                 end
 
                 if right and right.type == 'floor' then
                     right.type = 'wall'
+                    self:_updateTile(right.wx, right.wy, right)
                 end
             end
         end
@@ -420,10 +502,12 @@ function dungeonClass:_resolveCornerDoors(tile)
             if right and right.type == 'floor' then
                 if up and up.type == 'floor' then
                     up.type = 'wall'
+                    self:_updateTile(up.wx, up.wy, up)
                 end
 
                 if down and down.type == 'floor' then
                     down.type = 'wall'
+                    self:_updateTile(down.wx, down.wy, down)
                 end
             end
         end
@@ -440,7 +524,9 @@ function dungeonClass:_getAllTilesAsNodes()
 
             -- Only process tiles that are considered "floors"
             if tile and tile ~= nil and tile.type ~= 'ignore' and tile.type ~= 'empty' then
-                insert(grid, tile)
+                if tile.type ~= 'edge' and tile.type ~= 'chasm' then
+                    insert(grid, tile)
+                end
             end
         end
     end
@@ -458,10 +544,10 @@ function dungeonClass:_getTileNeighbors(node)
     local left = self:_getTile(node.wx - 1, node.wy)
     local right = self:_getTile(node.wx + 1, node.wy)
 
-    if up and up.type ~= 'empty' then insert(neighbors, up) end
-    if down and down.type ~= 'empty' then insert(neighbors, down) end
-    if left and left.type ~= 'empty' then insert(neighbors, left) end
-    if right and right.type ~= 'empty' then insert(neighbors, right) end
+    if up and up.type ~= 'empty' and up.type ~= 'edge' and up.type ~= 'chasm' then insert(neighbors, up) end
+    if down and down.type ~= 'empty' and down.type ~= 'edge' and down.type ~= 'chasm' then insert(neighbors, down) end
+    if left and left.type ~= 'empty' and left.type ~= 'edge' and left.type ~= 'chasm' then insert(neighbors, left) end
+    if right and right.type ~= 'empty' and right.type ~= 'edge' and right.type ~= 'chasm' then insert(neighbors, right) end
 
     return neighbors
 end
@@ -472,7 +558,7 @@ function dungeonClass:_getMapValue(node)
     if node.type == 'wall' then
         return huge
     elseif node.type == 'door' then
-        return 20
+        return 10
     else
         return 1
     end
@@ -496,7 +582,7 @@ function dungeonClass:_dijkstra(source)
         node.previous = nil
     end
 
-    listOfNodes[1].distance = 0
+    source.distance = 0
     sort(listOfNodes, function(a,b) return a.distance < b.distance end)
 
     while (#listOfNodes > 0) do
@@ -661,6 +747,8 @@ end
 -- No children indicate the hallway is a deadend.
 -- @function dungeonClass:removeBadHallways
 function dungeonClass:removeBadHallways(room)
+    love.timer.sleep(self.sleep)
+
     if room.type == 'hallway' then
         if #room.children == 0 and room.id ~= 'start' then
             printc('Deleting bad hallway at (' .. room.x .. ',' .. room.y .. ') room id: ' .. room.id)
@@ -679,6 +767,76 @@ function dungeonClass:cleanRoom(room)
             if room.tiles[y][x].type ~= 'empty' then
                 insert(self.changes, room.tiles[y][x])
             end
+        end
+    end
+end
+
+function dungeonClass:_isValidChasmPlacement(room, x, y)
+    x = floor(x)
+    y = floor(y)
+
+    local overlappingWreathCount = 0
+    local overlappingFillCount = 0
+
+    for ry = 1, #room.tiles do
+        for rx = 1, #room.tiles[ry] do
+            if (x) <= self.startx or (x + rx) >= self.width then return false end
+            if (y) <= self.starty or (y + ry) >= self.width then return false end
+
+            local targetTile = self:_getTile(x + rx, y + ry)
+            local curTile = room.tiles[ry][rx]
+
+            if targetTile and curTile then
+                if curTile.type == 'edge' and targetTile.type == 'wall' then
+                    overlappingWreathCount = overlappingWreathCount + 1
+                end
+
+                if curTile.type == 'chasm' and targetTile.type ~= 'empty' then
+                    overlappingFillCount = overlappingFillCount + 1
+                end
+            end
+        end
+    end
+    
+    if overlappingWreathCount >= 8 and overlappingFillCount < 8 then
+        return true
+    end
+
+    return false
+end
+
+local abc = math.random(1,1)
+
+function dungeonClass:generateChasm()
+    local width = math.random(10, 25)
+    local height = math.random(10, 25)
+
+    local listOfPositions = {}
+    for x = 1, self.width - width do
+        for y = 1, self.height - height do
+            insert(listOfPositions, {x = x, y = y})
+        end
+    end
+
+
+    local chasm = roomClass():generateChasm(width, height)
+    chasm.type = 'chasm' -- TODO: Issue #15 None of the rooms are instantiating with proper types.
+
+    for _ = 1, #listOfPositions do
+        local select = listOfPositions[random(1, #listOfPositions)]
+
+
+        if self:_isValidChasmPlacement(chasm, select.x, select.y) then
+            self:_addRoom(chasm, select.x, select.y)
+            return
+        end
+    end
+end
+
+function dungeonClass:wallInChasms()
+    for _, room in pairs(self.listOfRooms) do
+        if room.type == 'chasm' then
+            room:applyWallsToChasm(self)
         end
     end
 end

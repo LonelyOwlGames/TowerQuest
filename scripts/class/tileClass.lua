@@ -24,7 +24,7 @@ local Tile = Class{}
 local function _createUUID()
     local uuid = ''
     local chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
-    for i = 1, 30 do
+    for _ = 1, 30 do
         local l = math.random(1, #chars)
         uuid = uuid .. string.sub(chars, l, l)
     end
