@@ -150,7 +150,19 @@ end
 -- @see getRoomHeight
 -- @tparam boolean excludeEmpties whether empty tiles should be counted.
 function Room:getRoomDimensions(excludeEmpties)
-    return self:getRoomWidth(excludeEmpties), self:getRoomHeight(excludeEmpties)
+    local height = #self.tiles
+    local width = 0
+
+    for y = 1, #self.tiles do
+        for x = 1, #self.tiles[y] do
+            width = #self.tiles[y]
+            break
+        end
+    end
+
+    return width, height
+
+    -- return self:getRoomWidth(excludeEmpties), self:getRoomHeight(excludeEmpties)
 end
 
 --- A function for getting the (x, y) position of a room. 
@@ -463,12 +475,11 @@ end
 function Room:delete()
     local tileCount = 0
 
-    for y = 1, #self.tiles do
-        for x = 1, #self.tiles[y] do
-            self.tiles[y][x].type = 'empty'
-            tileCount = tileCount + 1
-        end
+    for i = #self, 1, -1 do
+        self[i] = nil
     end
+
+    self = nil
 
     love.thread.getChannel('stats'):push({tilesDeleted = tileCount})
 end

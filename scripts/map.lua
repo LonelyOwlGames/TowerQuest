@@ -27,7 +27,8 @@ function map:init()
     self.thread:start()
 
     self.changes = {}
-    self.previousChanges = {}
+    self.newChanges = {}
+    self.updatedChanges = {}
     self.cachedChanges = {}
 
     -- Initialize background tilemap
@@ -69,89 +70,123 @@ function map:update(dt, cinema)
     local info = love.thread.getChannel('info'):pop()
 
     -- Executed when a change is popped from the stack.
-    if info and info[2] then
-        if info then
-            local data = bitser.loads(info[2])
+    if info and info[1] then
+        local data = bitser.loads(info[2])
 
-            for _, change in pairs(data) do
-                table.insert(self.changes, {type = info[1], data = change})
-            end
-
-            self:load()
+        for _, change in pairs(data) do
+            table.insert(self.changes, {type = info[1], data = change})
         end
 
-        -- cinema:setArg('UI', 'state', 'Generating..')
-        -- cinema:setCameraProperty('debug', 'scale', 0.2)
+        self:load()
     end
 
-    -- TODO: Special color and opacity behavior for tile change visualization should be handled
-    -- in the change table, either when the change is registered on the main thread or when
-    -- the change is serialized in the dungoen generation class, not here. Move this.
-
     -- Iterate over list of previous changes, and change tile color one at a time.
-    if #self.previousChanges > 0 then
-        for i = 1, #self.previousChanges / 10 + 2 do
-            local previous = self.previousChanges[i]
-            table.remove(self.previousChanges, i)
+    -- for i = 1, #self.previousChanges / 10 + 2 <- used to speed up change updates
+    local test = 1
+    if #self.newChanges > 0 then
+        for i = 1, math.max(math.min(#self.newChanges/32, #self.newChanges), 1) do 
+            local new = self.newChanges[i]
 
-            if previous then 
-                local changeType = previous.change
+            table.remove(self.newChanges, i)
 
+            if new.tile.type == 'ignore' then
+                self.spriteBatch:setColor(0,0,0,0)
+            else
                 self.spriteBatch:setColor(1,1,1,1)
-
-                if changeType == 'update' then
-                    if previous.tile.type == 'empty' then
-                        self.spriteBatch:setColor(0,0,0,0)
-                    end
-                end
-
-                if previous.tile.distance then
-                    local distance = previous.tile.distance
-                    local r,g,b,a = _HSV((distance/2)/255, 1, 1)
-                    self.spriteBatch:setColor(r,g,b,a)
-                end
-
-                self.spriteBatch:set(previous.id, previous.quad, previous.tile.wx*64, previous.tile.wy*64)
-                self.cachedChanges[previous.tile.id] = {id = previous.id, quad = previous.quad} -- TODO: might be slow
             end
+
+            -- -- FOr dijkstra
+            if new.tile.distance then
+                local distance = new.tile.distance
+                local r,g,b,a = _HSV((distance/2)/255, 1, 0.5)
+                self.spriteBatch:setColor(r,g,b,a)
+            end
+
+            self.spriteBatch:set(new.id, new.quad, new.tile.wx*64, new.tile.wy*64)
+        end
+    end
+
+    if #self.newChanges == 0 and #self.updatedChanges > 0 then
+        for i = 1, math.max(math.min(#self.updatedChanges/32, #self.updatedChanges), 1) do 
+            local new = self.updatedChanges[i]
+            local old = self.cachedChanges[new.tile.wy][new.tile.wx]
+
+            table.remove(self.updatedChanges, i)
+
+            self.spriteBatch:setColor(1,1,1,1)
+            self.spriteBatch:set(new.id, new.quad, new.tile.wx*64, new.tile.wy*64)
         end
     end
 end
 
 function map:load()
     if #self.changes > 0 then
-        local changes = self.changes[1]
-        table.remove(self.changes, 1)
+        for _, change in pairs(self.changes) do
+            local tile = change.data
+            local quad = self:_createTile(tile)
+            local tx, ty = tile.wx, tile.wy
+    
+            if tile.type == 'ignore' then
+                self.spriteBatch:setColor(0, 0, 0, 0)
+            else
+                self.spriteBatch:setColor(1, 0.4, 0.8, 0.3)
+            end
 
-        if changes.type == 'room' then
-            for _, tile in pairs(changes.data.tiles) do
-                local quad = self:_createTile(tile)
-                local tx, ty = tile.wx, tile.wy
+            if change.type == 'add' then
+                if not self.cachedChanges[ty] then self.cachedChanges[ty] = {} end
 
-                if self.cachedChanges[tile.id] then
-                    table.insert(self.previousChanges, {id = self.cachedChanges[tile.id].id, quad = quad, tile = tile, change = 'update'})
-                else
-                    if tile.type ~= 'empty' and tile.type ~= 'ignore' then
-                    self.spriteBatch:setColor(0,0,0,0.3)
+                local id = self.spriteBatch:add(quad, tx*64, ty*64)
 
-                    local id = self.spriteBatch:add(quad, tx*64, ty*64)
-                    table.insert(self.previousChanges, {id = id, quad = quad, tile = tile, change = 'new'})
+                self.cachedChanges[ty][tx] = {id = id, quad = quad, tile = tile}
+                table.insert(self.newChanges, {id = id, quad = quad, tile = tile})
+            end
+
+            if change.type == 'update' then
+                local id = self.cachedChanges[ty][tx].id
+                -- quad = self.cachedChanges[ty][tx].quad
+
+                self.spriteBatch:set(id, quad, tx*64, ty*64)
+                table.insert(self.newChanges, {id = id, quad = quad, tile = tile})
+            end
+
+            if change.type == 'remove' then
+                if self.cachedChanges[ty] and self.cachedChanges[ty][tx] then -- Because ignored tiles aren't cached, but received here.
+                    local id = self.cachedChanges[ty][tx].id
+                    local type = self.cachedChanges[ty][tx].tile.type
+
+                    if tile.type ~= 'empty' then
+                    self.spriteBatch:setColor(0,0,0,0)
+                    self.spriteBatch:set(id, quad, tx*64, ty*64)
+
+                    self.cachedChanges[ty][tx] = nil
                     end
                 end
             end
-        end
 
-        if changes.type == 'tile' then
-            local quad = self:_createTile(changes.data)
-            local tx, ty = changes.data.wx, changes.data.wy
+            if change.type == 'restore' then
+                if self.cachedChanges[ty][tx] == nil then
+                    self.spriteBatch:setColor(1,1,1,1)
+                    local id = self.spriteBatch:add(quad, tx*64, ty*64)
+                    self.cachedChanges[ty][tx] = {id = id, quad = quad, tile = tile}
+                end
+            end
+                    
 
-            -- if changes.data.type ~= 'empty' then
-                self.spriteBatch:setColor(1,0,0,1)
-
-                local id = self.spriteBatch:add(quad, tx*64, ty*64)
-                table.insert(self.previousChanges, {id = id, quad = quad, tile = changes.data})
+            -- if tile.type ~= 'ignore' then
+            --     if self.cachedChanges[ty] and self.cachedChanges[ty][tx] then
+            --         table.insert(self.updatedChanges, {id = self.cachedChanges[ty][tx].id, quad = quad, tile = tile})
+            --     else
+            --         if not self.cachedChanges[ty] then self.cachedChanges[ty] = {} end
+            --
+            --         self.spriteBatch:setColor(.4,1,.8,0.3)
+            --         local id = self.spriteBatch:add(quad, tx*64, ty*64)
+            --         self.cachedChanges[ty][tx] = {id = id, quad = quad, tile = tile}
+            --         table.insert(self.newChanges, {id = id, quad = quad, tile = tile})
+            --     end
             -- end
         end
+
+        self.changes = {}
     end
 end
 

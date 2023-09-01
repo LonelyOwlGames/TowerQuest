@@ -44,6 +44,10 @@ function State.gameScreen:init()
         Console:draw()
     end)
 
+    Console.enabled = false
+    self.cinema:toggle('console')
+
+
     self.cinema:attach('UI', function(args)
         local progress = args.progress
         local roomsLoaded = args.roomsLoaded
