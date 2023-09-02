@@ -15,6 +15,9 @@
 -- @field tiles (table) List of tile objects in room.
 -- @field tileCache (table) 2D array of tile ids indexed by local x, y position.
 
+
+-- Merge error
+
 local Class = require 'libraries.hump.class'
 local tileClass = require 'scripts.class.tileClass'
 local CA = require 'scripts.class.cellular'
@@ -336,15 +339,10 @@ function Room:combineWith(room, ox, oy)
     local maxWidth = math.max(self:getWidth(), room:getWidth())
     local maxHeight = math.max(self:getHeight(), room:getHeight())
 
-    print(maxWidth, maxHeight)
+    maxWidth = maxWidth + math.abs(ox)*2
+    maxHeight = maxHeight + math.abs(oy)*2
 
-    local x1, y1 = self:getPosition()
-    local x2, y2 = room:getPosition()
-
-    local startX = math.min(x1, x2)
-    local startY = math.min(x2, y2)
-
-    local buffer = Room():generateSquareRoom(maxWidth - 2, maxHeight - 2)
+    local buffer = Room():generateSquareRoom(maxWidth, maxHeight)
 
     for y = 1, #buffer.tiles do
         for x = 1, #buffer.tiles[y] do
@@ -353,12 +351,22 @@ function Room:combineWith(room, ox, oy)
     end
 
     local rooms = {self, room}
-    for _, r in pairs(rooms) do
-        local cx = math.floor(maxWidth/2) - math.floor(r:getWidth()/2)
-        local cy = math.floor(maxHeight/2) - math.floor(r:getHeight()/2)
+    for i, r in pairs(rooms) do
+        local cx = math.floor(maxWidth/2) - math.floor(r:getWidth()/2) + 1
+        local cy = math.floor(maxHeight/2) - math.floor(r:getHeight()/2) + 1
+        local startX = 1
+        local startY = 1
 
-        for x = startX, maxWidth do
-            for y = startY, maxHeight do
+        if i == 2 then
+            cx = cx + ox
+            cy = cy + oy
+        else
+            cx = cx - ox
+            cy = cy - oy
+        end
+
+        for x = 1, maxWidth do
+            for y = 1, maxHeight do
                 local tile = r:getTile(x, y)
                 local target = buffer:getTile(x + cx, y + cy)
 
