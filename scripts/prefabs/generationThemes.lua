@@ -4,7 +4,7 @@ local themes = {}
 themes.dungeon = {
     dungeonWidth = 100,
     dungeonHeight = 100,
-    rooms = 15,
+    rooms = 55,
     spanType = 'last',
     types = {
         { shape = 'square', w = {4, 4}, h = {4, 5}, weight = 10}, -- Square

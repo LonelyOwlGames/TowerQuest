@@ -17,7 +17,6 @@
 -- @field tileCache (table) 2D array of room id's indexed by x, and y values.
 -- @field sleep (float) value for slowing down generation for visualization.
 
--- test
 local Class = require 'libraries.hump.class'
 local roomClass = require 'scripts.class.roomClass'
 local bitser = require 'libraries.bitser'
@@ -72,7 +71,7 @@ function dungeonClass:init(theme)
     for y = self.starty, self.height do
         self.tileCache[y] = {}
         for x = self.startx, self.width do
-            self.tileCache[y][x] = {}
+            self.tileCache[y][x] = false
         end
     end
 
@@ -157,15 +156,15 @@ function dungeonClass:_getRandomRoom(attempts, backStep) -- FIXME: Issue #12
     return self.roomHistory[backStep + 1]
 end
 
---- Retrieve a tile Object from a Room id.
+--- Retrieve a tile Object from tileCache.
 -- @lfunction dungeonClass:_getTileByRoomID
 function dungeonClass:_getTile(x, y)
     if x <= self.startx or x >= self.width then return false end
     if y <= self.starty or y >= self.height then return false end
 
     if self.tileCache[y] and self.tileCache[y][x] then
-        if self.tileCache[y][x][#self.tileCache[y][x]] ~= nil then
-            return self.tileCache[y][x][#self.tileCache[y][x]]
+        if self.tileCache[y][x] ~= false then
+            return self.tileCache[y][x]
         end
     end
 
@@ -292,7 +291,7 @@ function dungeonClass:_isValidRoomPlacement(room, x, y, target)
 end
 
 function dungeonClass:_updateTile(x, y, newTile)
-    insert(self.tileCache[y][x], newTile)
+    self.tileCache[y][x] = newTile
     insert(self.changes, newTile)
 end
 
@@ -696,17 +695,7 @@ function dungeonClass:deleteRoom(room)
 
             if room.tiles[y][x].type == 'door' then doorCount = doorCount + 1 end
             if room.tiles[y][x].type ~= 'empty' then tileCount = tileCount + 1 end
-
-            -- If the room has overlapping tiles, we remove
-            -- those tiles from the tileCache by roomid pairing.
-            if #self.tileCache[wy][wx] > 1 then
-                for i, tile in pairs(self.tileCache[wy][wx]) do
-                    if tile.roomid == room.id then
-                        remove(self.tileCache[wy][wx], i)
-                        break
-                    end
-                end
-            end
+            self.tileCache[wy][wx] = false
 
             insert(self.changes, room.tiles[y][x])
 
@@ -734,17 +723,6 @@ function dungeonClass:removeBadHallways(room)
 
     love.thread.getChannel('stats'):push({roomsDeleted = (self.maxDensity - self:getNumberOfRooms())})
 end
-
---- (DEPRECATED) Was needed before tileCache was expanded to contain multiple tiles.
--- function dungeonClass:cleanRoom(room)
---     for y = 1, #room.tiles do
---         for x = 1, #room.tiles[y] do
---             if room.tiles[y][x].type ~= 'empty' then
---                 insert(self.changes, room.tiles[y][x])
---             end
---         end
---     end
--- end
 
 function dungeonClass:_isValidChasmPlacement(room, x, y)
     x = floor(x)
