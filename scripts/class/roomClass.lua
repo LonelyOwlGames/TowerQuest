@@ -15,6 +15,9 @@
 -- @field tiles (table) List of tile objects in room.
 -- @field tileCache (table) 2D array of tile ids indexed by local x, y position.
 
+
+-- Merge error
+
 local Class = require 'libraries.hump.class'
 local tileClass = require 'scripts.class.tileClass'
 local CA = require 'scripts.class.cellular'
