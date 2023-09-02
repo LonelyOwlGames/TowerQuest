@@ -38,8 +38,8 @@ themes.test = {
 themes.mine = {
     dungeonWidth = 100,
     dungeonHeight = 100,
-    rooms = 30,
-    spanType = 'center',
+    rooms = 50,
+    spanType = 'last',
     types = {
         { shape = 'cellauto', w = {15, 20}, h = {15, 20}, weight = 90 },
         { shape = 'square', w = {6, 8}, h = {6, 8}, weight = 1 },
