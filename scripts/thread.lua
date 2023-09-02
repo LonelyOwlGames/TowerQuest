@@ -13,7 +13,7 @@ local total = 0
 -- main thread to process changes (catch up). Until I figure out
 -- synchronization later on (make steps pend changes, not operations)
 
-local Dungeon = dungeonClass(Themes.mine)
+local Dungeon = dungeonClass(Themes.dungeon)
 while Dungeon:getNumberOfRooms() < Dungeon.maxDensity do
     Dungeon:buildDungeon()
 

@@ -35,6 +35,7 @@ local sort = table.sort
 local insert = table.insert
 
 
+--- Shortcut for printing to runtime console.
 local function printc(text)
     return love.thread.getChannel('console'):push(text)
 end
@@ -74,25 +75,16 @@ function dungeonClass:init(theme)
         end
     end
 
-    self.listOfRooms = {} -- index -> room Object
-    self.roomHistory = {}
+    self.listOfRooms = {} -- index = roomid -> room object
+    self.roomHistory = {} -- index = int -> room object
 
     self.stats = {}
 
     self.changes = {} -- experiment with changes stack
 end
 
-function dungeonClass:_createSquare(data)
-    local w1, w2 = data.w[1], data.w[2] or data.w[1]
-    local h1, h2 = data.h[1], data.h[2] or data.h[1]
-    return roomClass():generateSquareRoom(random(w1, w2), random(h1, h2))
-end
-
-function dungeonClass:_createCircle(data)
-    local r1, r2 = data.r[1], data.r[2] or data.r[1]
-    return roomClass():generateCircleRoom(random(r1, r2))
-end
-
+--- Read shape data from theme, and output room object.
+-- @lfunction dungeonClass:_createRoom
 function dungeonClass:_createRoom(data)
     if data.shape == 'square' then
         local w1, w2 = data.w[1], data.w[2] or data.w[1]
@@ -114,28 +106,26 @@ end
 -- @lfunction dungeonClass:generateRoom
 function dungeonClass:_generateRandomRoom()
     local theme = self.theme
-    local r
+    local room
 
     local roomType = theme.types[math.random(1, #theme.types)]
     local roomWeight = roomType.weight
     local chance = random(1, 100)
 
-    if chance > roomWeight then
-        return self:_generateRandomRoom()
-    end
+    if chance > roomWeight then return self:_generateRandomRoom() end
 
     if roomType.shape == 'combine' then
         local roomA = self:_createRoom(roomType.combine[1])
         local roomB = self:_createRoom(roomType.combine[2])
-        r = roomA:combineWith(roomB, roomType.offset[1], roomType.offset[2])
+        room = roomA:combineWith(roomB, roomType.offset[1], roomType.offset[2])
     else
-        r = self:_createRoom(roomType)
+        room = self:_createRoom(roomType)
     end
 
-    r.id = _createUUID()
-    r:assignRoomIds(r.id)
+    room.id = _createUUID()
+    room:assignRoomIds(room.id)
 
-    return r
+    return room
 end
 
 
@@ -149,11 +139,9 @@ local function sortByConnectionsCenter(a,b)
     return #a.children > #b.children
 end
 
--- TODO: Issue #12 Remove 'attempts' from _getRandomRoom.
-
 --- Returns a random room Object from dungeonClass.listOfRooms.
 -- @lfunction dungeonClass:_getRandomRoom
-function dungeonClass:_getRandomRoom(attempts, backStep)
+function dungeonClass:_getRandomRoom(attempts, backStep) -- FIXME: Issue #12
     backStep = backStep or 0
 
     local sortType
@@ -165,7 +153,6 @@ function dungeonClass:_getRandomRoom(attempts, backStep)
 
     sort(self.roomHistory, sortType)
 
-    -- Return popped value.
     return self.roomHistory[backStep + 1]
 end
 
@@ -187,9 +174,7 @@ end
 --- "Throw" a generated room at the dungeon. If it is 
 --a valid placement, place the room into the dungeon.
 -- @lfunction dungeonClass:_throwRoomAtDungeon
-local iter = 0
-function dungeonClass:_throwRoomAtDungeon(room, attempts, mod)
-    iter = iter + 1
+function dungeonClass:_throwRoomAtDungeon(room, attempts, mod) -- FIXME: Issue #12
     attempts = attempts or 0
 
     local roomWidth, roomHeight = room:getRoomDimensions()
@@ -244,9 +229,6 @@ end
 --- Check if room placement at (x, y) is valid.
 -- @lfunction dungeonClass:_isValidRoomPlacement
 function dungeonClass:_isValidRoomPlacement(room, x, y, target)
-    x = floor(x)
-    y = floor(y)
-
     local overlappingWallCount = 0
     local overlappingTiles = {}
 
@@ -298,8 +280,10 @@ function dungeonClass:_isValidRoomPlacement(room, x, y, target)
 
     if overlappingWallCount >= 3 then
         insert(target.children, room)
+
         room.parent = target
         room._overlap = overlappingTiles
+
         return true
     else
         return false
@@ -341,11 +325,10 @@ function dungeonClass:_resolveOverlaps(room)
 
     if room.id == 'start' then return end
 
-    -- local select = math.random(2, #room._overlap)
-
     -- List of room._overlap index's for good doors.
     local doorCandidates = {}
 
+    -- Add good candidates to list
     for key, data in pairs(room._overlap) do
         local tile = data[1]
         local isGoodDoor = self:_checkForDoorPlacement(tile)
@@ -355,9 +338,7 @@ function dungeonClass:_resolveOverlaps(room)
         end
     end
 
-    -- FOR HALLWAYS
-    -- If there are only 3 tiles to choose from, always select middle.
-    -- if #room._overlap == 3 then select = 2 end
+    -- Choose a random door from list of candidates
     local select = doorCandidates[math.random(1, #doorCandidates)]
 
     local hasDoor = false
@@ -375,11 +356,9 @@ function dungeonClass:_resolveOverlaps(room)
 
             if n == select then
                 t1.type = 'door'
-                -- t2.type = 'empty'
                 self:_resolveCornerDoors(t1)
             else
                 t1.type = 'wall'
-                -- t2.type = 'empty'
             end
 
             insert(self.changes, t1)
@@ -390,27 +369,22 @@ function dungeonClass:_resolveOverlaps(room)
 
             if t2.type == 'door' then
                 t1.type = 'door'
-                -- t2.type = 'empty'
-
                 self:_resolveCornerDoors(t1)
                 insert(self.changes, t1)
             elseif t1.type == 'door' then
                 t1.type = 'door'
-                -- t2.type = 'empty'
-
                 self:_resolveCornerDoors(t1)
                 insert(self.changes, t1)
             else
                 t1.type = 'wall'
-                -- t2.type = 'empty'
                 insert(self.changes, t1)
             end
         end
     end
 end
 
+--- Add a tile at location, removes any tileCache reference at index
 function dungeonClass:_addTile(x, y, tile)
-    printc('tile added at ' .. x .. ' ' .. y)
     self.tileCache[y][x] = tile
     insert(self.changes, tile)
 end
@@ -761,15 +735,15 @@ function dungeonClass:removeBadHallways(room)
 end
 
 --- (DEPRECATED) Was needed before tileCache was expanded to contain multiple tiles.
-function dungeonClass:cleanRoom(room)
-    for y = 1, #room.tiles do
-        for x = 1, #room.tiles[y] do
-            if room.tiles[y][x].type ~= 'empty' then
-                insert(self.changes, room.tiles[y][x])
-            end
-        end
-    end
-end
+-- function dungeonClass:cleanRoom(room)
+--     for y = 1, #room.tiles do
+--         for x = 1, #room.tiles[y] do
+--             if room.tiles[y][x].type ~= 'empty' then
+--                 insert(self.changes, room.tiles[y][x])
+--             end
+--         end
+--     end
+-- end
 
 function dungeonClass:_isValidChasmPlacement(room, x, y)
     x = floor(x)
