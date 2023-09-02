@@ -141,7 +141,7 @@ end
 
 --- Returns a random room Object from dungeonClass.listOfRooms.
 -- @lfunction dungeonClass:_getRandomRoom
-function dungeonClass:_getRandomRoom(attempts, backStep) -- FIXME: Issue #12
+function dungeonClass:_getRandomRoom(backStep) -- FIXME: Issue #12
     backStep = backStep or 0
 
     local sortType
@@ -174,11 +174,11 @@ end
 --- "Throw" a generated room at the dungeon. If it is 
 --a valid placement, place the room into the dungeon.
 -- @lfunction dungeonClass:_throwRoomAtDungeon
-function dungeonClass:_throwRoomAtDungeon(room, attempts, mod) -- FIXME: Issue #12
-    attempts = attempts or 0
+function dungeonClass:_throwRoomAtDungeon(room, backStep) -- FIXME: Issue #12
+    backStep = backStep or 0
 
     local roomWidth, roomHeight = room:getSize()
-    local targetRoom = self:_getRandomRoom(attempts, mod)
+    local targetRoom = self:_getRandomRoom(backStep)
 
     if not targetRoom then
         local newRoom = self:_generateRandomRoom()
@@ -188,7 +188,7 @@ function dungeonClass:_throwRoomAtDungeon(room, attempts, mod) -- FIXME: Issue #
     -- Don't connect hallways to hallways
     if room.type == 'hallway' and targetRoom.type == 'hallway' then
         local newRoom = self:_generateRandomRoom()
-        return self:_throwRoomAtDungeon(newRoom, attempts + 1)
+        return self:_throwRoomAtDungeon(newRoom, backStep + 1)
     end
 
     -- Get starting positions from target room.
@@ -217,13 +217,14 @@ function dungeonClass:_throwRoomAtDungeon(room, attempts, mod) -- FIXME: Issue #
     local newRoom = self:_generateRandomRoom()
     local attemptsAtTarget = 30
 
+    return self:_throwRoomAtDungeon(newRoom, backStep + 1)
     -- If the room doesn't fit, throw a new generated room at it.
-    if attempts < attemptsAtTarget then
-        return self:_throwRoomAtDungeon(newRoom, attempts + 1)
-    else -- If 10 new rooms don't fit, we go back step back 1 room and try again.
-        local backSteps = attempts - attemptsAtTarget
-        return self:_throwRoomAtDungeon(newRoom, attempts + 1, backSteps)
-    end
+    -- if attempts < attemptsAtTarget then
+        -- return self:_throwRoomAtDungeon(newRoom, attempts + 1)
+    -- else -- If 10 new rooms don't fit, we go back step back 1 room and try again.
+        -- local backSteps = attempts - attemptsAtTarget
+        -- return self:_throwRoomAtDungeon(newRoom, attempts + 1, backSteps)
+    -- end
 end
 
 --- Check if room placement at (x, y) is valid.
@@ -290,7 +291,7 @@ function dungeonClass:_isValidRoomPlacement(room, x, y, target)
     end
 end
 
-function dungeonClass:_updateTile(x, y, newTile)
+function dungeonClass:_setTile(x, y, newTile)
     self.tileCache[y][x] = newTile
     insert(self.changes, newTile)
 end
@@ -384,7 +385,7 @@ function dungeonClass:_resolveOverlaps(room)
 end
 
 --- Add a tile at location, removes any tileCache reference at index
-function dungeonClass:_addTile(x, y, tile)
+function dungeonClass:_setTile(x, y, tile)
     self.tileCache[y][x] = tile
     insert(self.changes, tile)
 end
@@ -405,11 +406,11 @@ function dungeonClass:_addRoom(roomToAdd, x, y, customID)
         for rx = 1, #addedRoom.tiles[ry] do
             width = #addedRoom.tiles[ry]
 
-            -- if not addedRoom.tiles[ry][rx]:getType('empty') then
-                self:_updateTile(rx + x, ry + y, addedRoom.tiles[ry][rx])
+            if not addedRoom.tiles[ry][rx]:getType('empty') then
+                self:_setTile(rx + x, ry + y, addedRoom.tiles[ry][rx])
 
                 tileCount = tileCount + 1
-            -- end
+            end
         end
     end
 
@@ -462,12 +463,12 @@ function dungeonClass:_resolveCornerDoors(tile)
             if down and down.type == 'floor' then
                 if left and left.type == 'floor' then
                     left.type = 'wall'
-                    self:_updateTile(left.wx, left.wy, left)
+                    self:_setTile(left.wx, left.wy, left)
                 end
 
                 if right and right.type == 'floor' then
                     right.type = 'wall'
-                    self:_updateTile(right.wx, right.wy, right)
+                    self:_setTile(right.wx, right.wy, right)
                 end
             end
         end
@@ -476,12 +477,12 @@ function dungeonClass:_resolveCornerDoors(tile)
             if right and right.type == 'floor' then
                 if up and up.type == 'floor' then
                     up.type = 'wall'
-                    self:_updateTile(up.wx, up.wy, up)
+                    self:_setTile(up.wx, up.wy, up)
                 end
 
                 if down and down.type == 'floor' then
                     down.type = 'wall'
-                    self:_updateTile(down.wx, down.wy, down)
+                    self:_setTile(down.wx, down.wy, down)
                 end
             end
         end
