@@ -177,7 +177,7 @@ end
 function dungeonClass:_throwRoomAtDungeon(room, attempts, mod) -- FIXME: Issue #12
     attempts = attempts or 0
 
-    local roomWidth, roomHeight = room:getRoomDimensions()
+    local roomWidth, roomHeight = room:getSize()
     local targetRoom = self:_getRandomRoom(attempts, mod)
 
     if not targetRoom then
@@ -405,11 +405,11 @@ function dungeonClass:_addRoom(roomToAdd, x, y, customID)
         for rx = 1, #addedRoom.tiles[ry] do
             width = #addedRoom.tiles[ry]
 
-            if not addedRoom.tiles[ry][rx]:getType('empty') then
+            -- if not addedRoom.tiles[ry][rx]:getType('empty') then
                 self:_updateTile(rx + x, ry + y, addedRoom.tiles[ry][rx])
 
                 tileCount = tileCount + 1
-            end
+            -- end
         end
     end
 

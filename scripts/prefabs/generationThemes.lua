@@ -22,6 +22,19 @@ themes.dungeon = {
     }
 }
 
+themes.test = {
+    dungeonWidth = 100,
+    dungeonHeight = 100,
+    rooms = 1,
+    spanType = 'last',
+    types = {
+        { shape = 'combine', offset = {-2,-1}, weight = 10, combine = {
+            {shape = 'circle', r = {6} },
+            {shape = 'square', w = {17,22}, h = {2,8} },
+        }}
+    }
+}
+
 themes.mine = {
     dungeonWidth = 100,
     dungeonHeight = 100,
