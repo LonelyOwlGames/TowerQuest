@@ -78,78 +78,26 @@ function Room:setPosition(x, y)
     return self
 end
 
---- A function for pushing ids to Room.connectedRooms
--- @lfunction Room:connectTo
-function Room:connectTo(id)
-    -- self.connectedRooms[#self.connectedRooms] = id
-    table.insert(self.connectedRooms, id)
-end
-
---- Return room width by largest x-value of contained tiles.
+--- Return room width by tiles[y][x] size.
 -- @tparam boolean excludeEmpties whether to include empty tiles in calculation.
-function Room:getRoomWidth(excludeEmpties)
-    local counts = {}
-    local width
-
-    -- Add tiles (x) value to table to sort
+function Room:getWidth()
     for y = 1, #self.tiles do
         for x = 1, #self.tiles[y] do
-            if excludeEmpties then
-                if not self.tiles[y][x]:getType('empty') then
-                    table.insert(counts, x)
-                end
-            else
-                table.insert(counts, x)
-            end
+            return #self.tiles[y]
         end
     end
-
-    -- Push largest x (width) value to top
-    table.sort(counts, function(a,b) return a > b end)
-
-    -- Pop largest x value
-    width = counts[1]
-
-    -- See where the room is in the world
-    local roomXPos, _ = self:getPosition()
-
-    return width - roomXPos + 1
 end
 
---- Return room height by largest h-value of contained tiles.
+--- Return room height by tiles[y] size
 -- @tparam boolean excludeEmpties whether to include empty tiles in calculation.
-function Room:getRoomHeight(excludeEmpties)
-    local height
-
-    if excludeEmpties then
-        local counts = {}
-
-        for y = 1, #self.tiles do
-            for x = 1, #self.tiles[y] do
-                if not self.tiles[y][x]:getType('empty') then
-                    table.insert(counts, y)
-                end
-            end
-        end
-
-        table.sort(counts, function(a,b) return a > b end)
-
-        height = counts[1]
-    else
-        height = #self.tiles
-    end
-
-    -- See where the room is in the world
-    local _, roomYPos = self:getPosition()
-
-    return height - roomYPos + 1
+function Room:getHeight(excludeEmpties)
+    return #self.tiles
 end
 
 --- A function for getting width & height.
 -- @see getRoomWidth
 -- @see getRoomHeight
--- @tparam boolean excludeEmpties whether empty tiles should be counted.
-function Room:getRoomDimensions(excludeEmpties)
+function Room:getSize()
     local height = #self.tiles
     local width = 0
 
@@ -161,8 +109,6 @@ function Room:getRoomDimensions(excludeEmpties)
     end
 
     return width, height
-
-    -- return self:getRoomWidth(excludeEmpties), self:getRoomHeight(excludeEmpties)
 end
 
 --- A function for getting the (x, y) position of a room. 
@@ -273,28 +219,28 @@ function Room:applyWallsToChasm(dungeon)
                     local new = tileClass():createTile(self, x, y-1, 'wall')
                     new.wx = wx
                     new.wy = wy
-                    dungeon:_addTile(wx, wy-1, new)
+                    dungeon:_setTile(wx, wy-1, new)
                 end
 
                 if not down then
                     local new = tileClass():createTile(self, x, y+1, 'wall')
                     new.wx = wx
                     new.wy = wy
-                    dungeon:_addTile(wx, wy+1, new)
+                    dungeon:_setTile(wx, wy+1, new)
                 end
 
                 if not left then
                     local new = tileClass():createTile(self, x-1, y, 'wall')
                     new.wy = wy
                     new.wx = wx
-                    dungeon:_addTile(wx-1, wy, new)
+                    dungeon:_setTile(wx-1, wy, new)
                 end
 
                 if not right then
                     local new = tileClass():createTile(self, x+1, y, 'wall')
                     new.wx = wx
                     new.wy = wy
-                    dungeon:_addTile(wx+1, wy, new)
+                    dungeon:_setTile(wx+1, wy, new)
                 end
             end
         end
@@ -387,8 +333,10 @@ end
 -- If (ox, oy) is given, the room being added will
 -- be offset by that amount. Otherwise it's centered.
 function Room:combineWith(room, ox, oy)
-    local maxWidth = math.max(self:getRoomWidth(), room:getRoomWidth())
-    local maxHeight = math.max(self:getRoomHeight(), room:getRoomHeight())
+    local maxWidth = math.max(self:getWidth(), room:getWidth())
+    local maxHeight = math.max(self:getHeight(), room:getHeight())
+
+    print(maxWidth, maxHeight)
 
     local x1, y1 = self:getPosition()
     local x2, y2 = room:getPosition()
@@ -406,8 +354,8 @@ function Room:combineWith(room, ox, oy)
 
     local rooms = {self, room}
     for _, r in pairs(rooms) do
-        local cx = math.floor(maxWidth/2) - math.floor(r:getRoomWidth()/2)
-        local cy = math.floor(maxHeight/2) - math.floor(r:getRoomHeight()/2)
+        local cx = math.floor(maxWidth/2) - math.floor(r:getWidth()/2)
+        local cy = math.floor(maxHeight/2) - math.floor(r:getHeight()/2)
 
         for x = startX, maxWidth do
             for y = startY, maxHeight do
