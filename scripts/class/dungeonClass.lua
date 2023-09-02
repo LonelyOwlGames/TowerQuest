@@ -17,6 +17,7 @@
 -- @field tileCache (table) 2D array of room id's indexed by x, and y values.
 -- @field sleep (float) value for slowing down generation for visualization.
 
+-- test
 local Class = require 'libraries.hump.class'
 local roomClass = require 'scripts.class.roomClass'
 local bitser = require 'libraries.bitser'
